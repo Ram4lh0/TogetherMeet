@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "./supabaseClient";
 
 // Font
 if (typeof document !== "undefined" && !document.getElementById("pelada-font")) {
@@ -30,8 +31,6 @@ if (typeof document !== "undefined") {
     document.head.appendChild(style);
   }
 }
-
-const STORAGE_KEY = "pelada_events_v1";
 
 const THEME_KEY = "pelada_theme_v1";
 
@@ -89,7 +88,6 @@ const THEMES = {
 const ACCENT = "var(--pelada-accent)";
 const ACCENT_DARK = "var(--pelada-accent-dark)";
 const ACCENT_SOFT = "var(--pelada-accent-soft)";
-const BG = "var(--pelada-bg)";
 const SURFACE = "var(--pelada-surface)";
 const SURFACE2 = "var(--pelada-surface-2)";
 const BORDER = "var(--pelada-border)";
@@ -106,18 +104,8 @@ const INPUT_SHADOW = "var(--pelada-input-shadow)";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
 const BASE = {
@@ -153,6 +141,139 @@ const inputStyle = {
   boxSizing: "border-box",
   boxShadow: INPUT_SHADOW,
 };
+
+// ─── Supabase helpers ────────────────────────────────────────────────────────
+
+/**
+ * Carrega um evento do Supabase pelo ID.
+ * Retorna o evento no mesmo formato que o estado local usa, ou null se não existir.
+ */
+async function fetchEventById(id) {
+  const { data: ev, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !ev) return null;
+
+  const { data: dates } = await supabase
+    .from("event_dates")
+    .select("date")
+    .eq("event_id", id);
+
+  const { data: responses } = await supabase
+    .from("responses")
+    .select("id, participant_name, updated_at")
+    .eq("event_id", id);
+
+  const fullResponses = await Promise.all(
+    (responses || []).map(async (r) => {
+      const { data: slots } = await supabase
+        .from("availability_slots")
+        .select("date, slot_minutes")
+        .eq("response_id", r.id);
+
+      const availability = {};
+      (slots || []).forEach(({ date, slot_minutes }) => {
+        availability[`${date}|${slot_minutes}`] = true;
+      });
+
+      return {
+        name: r.participant_name,
+        nameKey: normalizeName(r.participant_name),
+        availability,
+        updatedAt: r.updated_at,
+        _id: r.id,
+      };
+    })
+  );
+
+  return {
+    id: ev.id,
+    title: ev.title,
+    creatorName: ev.creator_name,
+    dates: (dates || []).map((d) => d.date).sort(),
+    startTime: ev.start_time,
+    endTime: ev.end_time,
+    responses: fullResponses,
+    createdAt: ev.created_at,
+  };
+}
+
+/**
+ * Insere um novo evento no Supabase.
+ */
+async function insertEvent(event) {
+  const { error } = await supabase.from("events").insert({
+    id: event.id,
+    title: event.title,
+    creator_name: event.creatorName,
+    start_time: event.startTime,
+    end_time: event.endTime,
+  });
+  if (error) throw error;
+
+  if (event.dates.length > 0) {
+    const { error: datesError } = await supabase.from("event_dates").insert(
+      event.dates.map((date) => ({ event_id: event.id, date }))
+    );
+    if (datesError) throw datesError;
+  }
+}
+
+/**
+ * Guarda (upsert) a disponibilidade de um participante.
+ * Apaga os slots antigos e insere os novos.
+ */
+async function upsertResponse(eventId, participantName, availability) {
+  const nameKey = normalizeName(participantName);
+
+  // Verificar se já existe resposta para este nome
+  const { data: existing } = await supabase
+    .from("responses")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("participant_name", participantName)
+    .maybeSingle();
+
+  let responseId;
+
+  if (existing) {
+    responseId = existing.id;
+    // Apagar slots antigos
+    await supabase.from("availability_slots").delete().eq("response_id", responseId);
+    // Atualizar timestamp
+    await supabase
+      .from("responses")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", responseId);
+  } else {
+    // Criar nova resposta
+    const { data: newResponse, error } = await supabase
+      .from("responses")
+      .insert({ event_id: eventId, participant_name: participantName })
+      .select("id")
+      .single();
+    if (error) throw error;
+    responseId = newResponse.id;
+  }
+
+  // Inserir slots novos
+  const slots = Object.entries(availability)
+    .filter(([, val]) => !!val)
+    .map(([key]) => {
+      const [date, slot_minutes] = key.split("|");
+      return { response_id: responseId, date, slot_minutes: Number(slot_minutes) };
+    });
+
+  if (slots.length > 0) {
+    const { error: slotsError } = await supabase.from("availability_slots").insert(slots);
+    if (slotsError) throw slotsError;
+  }
+}
+
+// ─── Utilitários ─────────────────────────────────────────────────────────────
 
 function uid() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -240,10 +361,7 @@ function clamp(value, min, max) {
 function generateSlots(startTime, endTime) {
   const start = parseTime(startTime);
   let end = parseTime(endTime);
-
-  // Permite ranges que passam da meia-noite, ex.: 21:30 -> 04:00
   if (end <= start) end += 1440;
-
   const slots = [];
   for (let m = start; m < end; m += 30) {
     slots.push({
@@ -260,60 +378,12 @@ function slotKey(dateKey, slotId) {
   return `${dateKey}|${slotId}`;
 }
 
-function getCalendarDays(cursorDate) {
-  const year = cursorDate.getFullYear();
-  const month = cursorDate.getMonth();
-  const first = new Date(year, month, 1);
-  const last = new Date(year, month + 1, 0);
-
-  // Segunda-feira como primeiro dia da semana
-  const firstWeekdayIndex = (first.getDay() + 6) % 7;
-  const days = [];
-
-  for (let i = 0; i < firstWeekdayIndex; i++) days.push(null);
-  for (let d = 1; d <= last.getDate(); d++) days.push(new Date(year, month, d));
-  while (days.length % 7 !== 0) days.push(null);
-
-  return days;
-}
-
-function loadEvents() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveEvents(events) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-}
-
-
-function useIsPhone() {
-  const [isPhone, setIsPhone] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.innerWidth <= 760;
-  });
-
-  useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= 760);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  return isPhone;
-}
-
 function getInitialThemeMode() {
   if (typeof window === "undefined") return "light";
   try {
     const stored = window.localStorage.getItem(THEME_KEY);
     if (stored === "light" || stored === "dark") return stored;
-  } catch {
-    // Ignore storage errors in private mode.
-  }
+  } catch { /* ignore */ }
   return "light";
 }
 
@@ -334,12 +404,25 @@ function blurActiveElement() {
   if (active && typeof active.blur === "function") active.blur();
 }
 
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth <= 760;
+  });
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth <= 760);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return isPhone;
+}
+
 function useViewportSize() {
   const [size, setSize] = useState(() => {
     if (typeof window === "undefined") return { width: 390, height: 844 };
     return { width: window.innerWidth, height: window.innerHeight };
   });
-
   useEffect(() => {
     const onResize = () => setSize({ width: window.innerWidth, height: window.innerHeight });
     onResize();
@@ -350,18 +433,20 @@ function useViewportSize() {
       window.removeEventListener("orientationchange", onResize);
     };
   }, []);
-
   return size;
 }
+
 if (typeof document !== "undefined") {
   applyThemeMode(getInitialThemeMode());
 }
 
+// ─── App ─────────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [events, setEvents] = useState({});
+  const [currentEvent, setCurrentEvent] = useState(null);
   const [screen, setScreen] = useState("home");
-  const [currentEventId, setCurrentEventId] = useState(null);
-  const [missingEventId, setMissingEventId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Create event
   const [eventTitle, setEventTitle] = useState("");
@@ -388,11 +473,7 @@ export default function App() {
 
   useEffect(() => {
     applyThemeMode(themeMode);
-    try {
-      window.localStorage.setItem(THEME_KEY, themeMode);
-    } catch {
-      // Ignore storage errors in private mode.
-    }
+    try { window.localStorage.setItem(THEME_KEY, themeMode); } catch { /* ignore */ }
   }, [themeMode]);
 
   const toggleTheme = useCallback(() => {
@@ -405,28 +486,18 @@ export default function App() {
       {content}
     </>
   ), [themeMode, toggleTheme]);
-  useEffect(() => {
-    const stored = loadEvents();
-    setEvents(stored);
 
+  // Ao carregar, verifica se há ?event= na URL
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("event");
     if (id) {
-      if (stored[id]) {
-        setCurrentEventId(id);
-        setScreen("event");
-      } else {
-        setMissingEventId(id);
-        setEventCode(id);
-        setScreen("home");
-      }
+      loadEvent(id);
     }
   }, []);
 
   useEffect(() => {
-    const stop = () => {
-      dragging.current = false;
-    };
+    const stop = () => { dragging.current = false; };
     window.addEventListener("mouseup", stop);
     window.addEventListener("touchend", stop);
     return () => {
@@ -435,7 +506,32 @@ export default function App() {
     };
   }, []);
 
-  const currentEvent = currentEventId ? events[currentEventId] : null;
+  // ── Carregar evento do Supabase
+  const loadEvent = async (id) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const ev = await fetchEventById(id.trim());
+      if (ev) {
+        setCurrentEvent(ev);
+        window.history.pushState({}, "", `${window.location.pathname}?event=${id.trim()}`);
+        setScreen("event");
+      } else {
+        setError("Evento não encontrado.");
+      }
+    } catch (e) {
+      setError("Erro ao carregar evento. Tenta novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Recarregar evento atual (após submeter resposta, etc.)
+  const reloadCurrentEvent = async () => {
+    if (!currentEvent) return;
+    const ev = await fetchEventById(currentEvent.id);
+    if (ev) setCurrentEvent(ev);
+  };
 
   const eventDates = useMemo(() => {
     if (!currentEvent) return [];
@@ -452,34 +548,18 @@ export default function App() {
     [selectedDates]
   );
 
-  const eventLink = currentEventId
-    ? `${window.location.origin}${window.location.pathname}?event=${currentEventId}`
+  const eventLink = currentEvent
+    ? `${window.location.origin}${window.location.pathname}?event=${currentEvent.id}`
     : "";
 
-  const updateEvents = useCallback((updater) => {
-    setEvents((prev) => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      saveEvents(next);
-      return next;
-    });
-  }, []);
-
-  const openEvent = (id) => {
-    const clean = id.trim();
-    if (!clean || !events[clean]) return;
-    setMissingEventId(null);
-    setCurrentEventId(clean);
-    setParticipantName("");
-    setAvailability({});
-    window.history.pushState({}, "", `${window.location.pathname}?event=${clean}`);
-    setScreen("event");
-  };
-
-  const createEvent = () => {
+  // ── Criar evento
+  const createEvent = async () => {
     if (createSubmitting.current) return;
     blurActiveElement();
     if (!eventTitle.trim() || !creatorName.trim() || selectedDateKeys.length === 0) return;
     createSubmitting.current = true;
+    setLoading(true);
+    setError(null);
 
     const id = uid();
     const newEvent = {
@@ -493,22 +573,32 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
-    updateEvents((prev) => ({ ...prev, [id]: newEvent }));
-    setCurrentEventId(id);
-    setParticipantName(creatorName.trim());
-    setAvailability({});
-    window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
-    setCreateStep("title");
-    setScreen("created");
-    window.setTimeout(() => {
-      createSubmitting.current = false;
-    }, 300);
+    try {
+      await insertEvent(newEvent);
+      setCurrentEvent(newEvent);
+      setParticipantName(creatorName.trim());
+      setAvailability({});
+      window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
+      setCreateStep("title");
+      setScreen("created");
+    } catch (e) {
+      setError("Erro ao criar evento. Verifica a ligação e tenta novamente.");
+    } finally {
+      setLoading(false);
+      setTimeout(() => { createSubmitting.current = false; }, 300);
+    }
+  };
+
+  // ── Entrar num evento pelo código
+  const openEvent = (id) => {
+    const clean = id.trim();
+    if (!clean) return;
+    loadEvent(clean);
   };
 
   const startResponse = () => {
     const name = participantName.trim();
     if (!name || !currentEvent) return;
-
     const existing = currentEvent.responses?.find(
       (r) => normalizeName(r.name) === normalizeName(name)
     );
@@ -519,7 +609,6 @@ export default function App() {
   const startCreatorResponse = () => {
     const name = currentEvent?.creatorName?.trim();
     if (!name || !currentEvent) return;
-
     const existing = currentEvent.responses?.find(
       (r) => normalizeName(r.name) === normalizeName(name)
     );
@@ -551,7 +640,8 @@ export default function App() {
     }
   }, []);
 
-  const submitResponse = () => {
+  // ── Submeter disponibilidade
+  const submitResponse = async () => {
     if (responseSubmitting.current) return;
     blurActiveElement();
     dragging.current = false;
@@ -559,25 +649,19 @@ export default function App() {
     const name = participantName.trim();
     if (!currentEvent || !name) return;
     responseSubmitting.current = true;
+    setLoading(true);
+    setError(null);
 
-    const cleanAvailability = Object.fromEntries(
-      Object.entries(availability).filter(([, value]) => !!value)
-    );
-
-    updateEvents((prev) => {
-      const ev = prev[currentEvent.id];
-      const responses = ev.responses || [];
-      const nextResponses = [
-        ...responses.filter((r) => normalizeName(r.name) !== normalizeName(name)),
-        { name, nameKey: normalizeName(name), availability: cleanAvailability, updatedAt: new Date().toISOString() },
-      ];
-      return { ...prev, [ev.id]: { ...ev, responses: nextResponses } };
-    });
-
-    setScreen("results");
-    window.setTimeout(() => {
-      responseSubmitting.current = false;
-    }, 300);
+    try {
+      await upsertResponse(currentEvent.id, name, availability);
+      await reloadCurrentEvent();
+      setScreen("results");
+    } catch (e) {
+      setError("Erro ao guardar disponibilidade. Tenta novamente.");
+    } finally {
+      setLoading(false);
+      setTimeout(() => { responseSubmitting.current = false; }, 300);
+    }
   };
 
   const getCount = (dateKey, slotId) => {
@@ -592,7 +676,6 @@ export default function App() {
       .map((r) => r.name);
   };
 
-
   const currentParticipantResponse = useMemo(() => {
     const name = normalizeName(participantName);
     if (!currentEvent || !name) return null;
@@ -604,24 +687,21 @@ export default function App() {
     setAvailability(currentParticipantResponse.availability || {});
     setScreen("fill");
   };
+
   const bestOptions = useMemo(() => {
     if (!currentEvent) return [];
     const rows = [];
     for (const d of eventDates) {
       for (const s of slots) {
         const count = getCount(d, s.id);
-
         if (count > 0) {
-          rows.push({
-            dateKey: d,
-            slot: s,
-            count,
-            names: getNames(d, s.id),
-          });
+          rows.push({ dateKey: d, slot: s, count, names: getNames(d, s.id) });
         }
       }
     }
-    return rows.sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id)).slice(0, 4);
+    return rows
+      .sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id))
+      .slice(0, 4);
   }, [currentEvent, eventDates, slots]);
 
   const selectedCount = Object.values(availability).filter(Boolean).length;
@@ -631,22 +711,33 @@ export default function App() {
       await navigator.clipboard.writeText(eventLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
-    } catch {
-      setCopied(false);
-    }
+    } catch { setCopied(false); }
   };
 
   const resetToHome = () => {
     setScreen("home");
-    setCurrentEventId(null);
+    setCurrentEvent(null);
     setParticipantName("");
     setAvailability({});
     setCreatorName("");
     setCreateStep("title");
+    setError(null);
     window.history.pushState({}, "", window.location.pathname);
   };
 
-  // ───────────────────────────────────────────────────────────── HOME
+  // ── Loading overlay
+  if (loading) {
+    return withTheme(
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ textAlign: "center", color: MUTED2 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⚽</div>
+          <p style={{ margin: 0, fontSize: 14 }}>A carregar...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────── HOME
   if (screen === "home") {
     return withTheme(
       <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -654,17 +745,20 @@ export default function App() {
           <div style={{ textAlign: "center", marginBottom: 34 }}>
             <div style={{ width: 68, height: 68, background: ACCENT_SOFT, borderRadius: 24, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}`, boxShadow: SOFT_SHADOW }}>⚽</div>
             <h1 style={{ margin: "10px 0 0", fontSize: 32, color: "#166534", letterSpacing: "-1px" }}>Organiza Eventos</h1>
-            <p style={{ margin: "20px 20px 0", color: MUTED2, fontSize: 13 }}>Já que o Pedro não dá conta disto, organiza aqui a melhor hora para todos.</p>
+            <p style={{ margin: "20px 20px 0", color: MUTED2, fontSize: 13 }}>Marca a melhor hora para toda a gente.</p>
           </div>
 
-          {missingEventId && (
+          {error && (
             <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
-              Este evento não existe neste browser. Com Supabase isto passa a funcionar entre dispositivos.
+              {error}
             </div>
           )}
 
           <div style={{ display: "grid", gap: 12 }}>
-            <button onClick={() => { setCreateStep("title"); setScreen("create"); }} style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%", boxShadow: "0 14px 32px rgba(34,197,94,0.22)" }}>
+            <button
+              onClick={() => { setCreateStep("title"); setScreen("create"); }}
+              style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%", boxShadow: "0 14px 32px rgba(34,197,94,0.22)" }}
+            >
               Criar Evento
             </button>
 
@@ -673,35 +767,29 @@ export default function App() {
                 entrar num evento
               </p>
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={eventCode} onChange={(e) => setEventCode(e.target.value)} placeholder="código do evento" style={inputStyle} />
-                <button onClick={() => openEvent(eventCode)} disabled={!events[eventCode.trim()]} style={{ ...buttonBase, background: events[eventCode.trim()] ? ACCENT : SURFACE, color: events[eventCode.trim()] ? "#fff" : MUTED2, whiteSpace: "nowrap" }}>
+                <input
+                  value={eventCode}
+                  onChange={(e) => setEventCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && openEvent(eventCode)}
+                  placeholder="código do evento"
+                  style={inputStyle}
+                />
+                <button
+                  onClick={() => openEvent(eventCode)}
+                  disabled={!eventCode.trim()}
+                  style={{ ...buttonBase, background: eventCode.trim() ? ACCENT : SURFACE, color: eventCode.trim() ? "#fff" : MUTED2, whiteSpace: "nowrap" }}
+                >
                   Entrar
                 </button>
               </div>
             </div>
-
-            {Object.keys(events).length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>eventos neste browser</p>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {Object.values(events).slice().reverse().map((ev) => (
-                    <button key={ev.id} onClick={() => openEvent(ev.id)} style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: TEXT, borderRadius: 18, padding: 14, textAlign: "left", cursor: "pointer", fontFamily: "'Sora', sans-serif" }}>
-                      <strong>{ev.title}</strong>
-                      <span style={{ display: "block", marginTop: 4, color: MUTED2, fontSize: 12 }}>
-                        {ev.dates.length} dia{ev.dates.length !== 1 ? "s" : ""} · {ev.responses?.length || 0} resposta{(ev.responses?.length || 0) !== 1 ? "s" : ""}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // ───────────────────────────────────────────────────────────── CREATE
+  // ─────────────────────────────────────────────────────────────── CREATE
   if (screen === "create") {
     const canContinueTitle = eventTitle.trim().length > 0 && creatorName.trim().length > 0;
     const canCreate = eventTitle.trim() && creatorName.trim() && selectedDateKeys.length > 0;
@@ -712,20 +800,10 @@ export default function App() {
         <div style={{ ...BASE, minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 18px" }}>
           <div style={{ width: "100%", maxWidth: 430 }}>
             <button onClick={resetToHome} style={{ ...miniButton, marginBottom: 18 }}>←</button>
-
             <div style={modalCardStyle}>
-              <div style={{ width: 56, height: 56, borderRadius: 22, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, marginBottom: 18 }}>
-                ⚡
-              </div>
-
-              <p style={{ margin: "0 0 8px", color: ACCENT_DARK, fontSize: 26, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                novo evento
-              </p>
-
-
-              <p style={{ margin: "15px 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>
-                Dá um nome ao evento e identifica o criador.
-              </p>
+              <div style={{ width: 56, height: 56, borderRadius: 22, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, marginBottom: 18 }}>⚡</div>
+              <p style={{ margin: "0 0 8px", color: ACCENT_DARK, fontSize: 26, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>novo evento</p>
+              <p style={{ margin: "15px 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>Dá um nome ao evento e identifica o criador.</p>
 
               <label style={{ ...labelStyle, display: "block", marginBottom: 12 }}>
                 Nome do evento
@@ -752,14 +830,7 @@ export default function App() {
               <button
                 onClick={() => setCreateStep("details")}
                 disabled={!canContinueTitle}
-                style={{
-                  ...buttonBase,
-                  width: "100%",
-                  marginTop: 14,
-                  background: canContinueTitle ? ACCENT : DISABLED_BG,
-                  color: canContinueTitle ? "#fff" : MUTED2,
-                  boxShadow: canContinueTitle ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
-                }}
+                style={{ ...buttonBase, width: "100%", marginTop: 14, background: canContinueTitle ? ACCENT : DISABLED_BG, color: canContinueTitle ? "#fff" : MUTED2, boxShadow: canContinueTitle ? "0 14px 32px rgba(34,197,94,0.22)" : "none" }}
               >
                 Continuar
               </button>
@@ -772,32 +843,22 @@ export default function App() {
     return withTheme(
       <div style={{ ...BASE, padding: isPhone ? "16px 12px 28px" : "22px 16px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
-          <Header
-            title="Criar Evento"
-            subtitle="escolhe os dias e o intervalo de horas"
-            onBack={() => setCreateStep("title")}
-          />
+          <Header title="Criar Evento" subtitle="escolhe os dias e o intervalo de horas" onBack={() => setCreateStep("title")} />
+
+          {error && (
+            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
+              {error}
+            </div>
+          )}
 
           <div style={{ display: "grid", gap: 14 }}>
             <div style={eventNameCardStyle}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ margin: "0 0 5px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                  evento
-                </p>
-                <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {eventTitle}
-                </h2>
-                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  Criado por {creatorName}
-                </p>
+                <p style={{ margin: "0 0 5px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>evento</p>
+                <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{eventTitle}</h2>
+                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Criado por {creatorName}</p>
               </div>
-
-              <button
-                onClick={() => setCreateStep("title")}
-                style={{ ...miniButton, width: "auto", paddingInline: 12, fontSize: 12, fontWeight: 800 }}
-              >
-                Editar
-              </button>
+              <button onClick={() => setCreateStep("title")} style={{ ...miniButton, width: "auto", paddingInline: 12, fontSize: 12, fontWeight: 800 }}>Editar</button>
             </div>
 
             <IntegratedCalendarPicker
@@ -811,18 +872,7 @@ export default function App() {
             {selectedDateKeys.length > 0 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: -2 }}>
                 {selectedDateKeys.map((d) => (
-                  <span
-                    key={d}
-                    style={{
-                      background: ACCENT_SOFT,
-                      border: `1px solid ${BORDER}`,
-                      color: ACCENT_DARK,
-                      borderRadius: 999,
-                      padding: "7px 11px",
-                      fontSize: 12,
-                      fontWeight: 800,
-                    }}
-                  >
+                  <span key={d} style={{ background: ACCENT_SOFT, border: `1px solid ${BORDER}`, color: ACCENT_DARK, borderRadius: 999, padding: "7px 11px", fontSize: 12, fontWeight: 800 }}>
                     {formatDateLong(d)}
                   </span>
                 ))}
@@ -831,58 +881,21 @@ export default function App() {
 
             <div style={rangeCardStyle}>
               <div style={{ marginBottom: 12 }}>
-                <p style={{ margin: 0, color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                  range de horas
-                </p>
-                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12 }}>
-                  Slots de 30 em 30 minutos
-                </p>
+                <p style={{ margin: 0, color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>range de horas</p>
+                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12 }}>Slots de 30 em 30 minutos</p>
               </div>
-
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8, width: "100%" }}>
                 <label style={{ ...labelStyle, minWidth: 0 }}>
                   Das
-                  <input
-                    type="time"
-                    step="1800"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    style={{
-                      ...inputStyle,
-                      marginTop: 6,
-                      padding: isPhone ? "12px 8px" : "14px 16px",
-                      minWidth: 0,
-                      width: "100%",
-                      WebkitAppearance: "none",
-                      appearance: "none",
-                    }}
-                  />
+                  <input type="time" step="1800" value={startTime} onChange={(e) => setStartTime(e.target.value)} style={{ ...inputStyle, marginTop: 6, padding: isPhone ? "12px 8px" : "14px 16px", minWidth: 0, width: "100%", WebkitAppearance: "none", appearance: "none" }} />
                 </label>
-
                 <label style={{ ...labelStyle, minWidth: 0 }}>
                   Até
-                  <input
-                    type="time"
-                    step="1800"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    style={{
-                      ...inputStyle,
-                      marginTop: 6,
-                      padding: isPhone ? "12px 8px" : "14px 16px",
-                      minWidth: 0,
-                      width: "100%",
-                      WebkitAppearance: "none",
-                      appearance: "none",
-                    }}
-                  />
+                  <input type="time" step="1800" value={endTime} onChange={(e) => setEndTime(e.target.value)} style={{ ...inputStyle, marginTop: 6, padding: isPhone ? "12px 8px" : "14px 16px", minWidth: 0, width: "100%", WebkitAppearance: "none", appearance: "none" }} />
                 </label>
               </div>
-
               <p style={{ margin: "10px 0 0", color: crossesMidnight ? ACCENT_DARK : MUTED2, fontSize: 12, lineHeight: 1.45 }}>
-                {crossesMidnight
-                  ? "Este range passa da meia-noite. Ex.: 21:30 → 04:00."
-                  : "Os participantes só poderão escolher slots dentro deste intervalo."}
+                {crossesMidnight ? "Este range passa da meia-noite. Ex.: 21:30 → 04:00." : "Os participantes só poderão escolher slots dentro deste intervalo."}
               </p>
             </div>
 
@@ -890,12 +903,7 @@ export default function App() {
               onPointerUp={(e) => { e.preventDefault(); createEvent(); }}
               onClick={createEvent}
               disabled={!canCreate}
-              style={{
-                ...buttonBase,
-                background: canCreate ? ACCENT : DISABLED_BG,
-                color: canCreate ? "#fff" : MUTED2,
-                boxShadow: canCreate ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
-              }}
+              style={{ ...buttonBase, background: canCreate ? ACCENT : DISABLED_BG, color: canCreate ? "#fff" : MUTED2, boxShadow: canCreate ? "0 14px 32px rgba(34,197,94,0.22)" : "none" }}
             >
               Criar Evento
             </button>
@@ -905,7 +913,7 @@ export default function App() {
     );
   }
 
-  // ───────────────────────────────────────────────────────────── CREATED
+  // ─────────────────────────────────────────────────────────────── CREATED
   if (screen === "created" && currentEvent) {
     return withTheme(
       <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -913,11 +921,9 @@ export default function App() {
           <p style={{ margin: 0, color: ACCENT, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>evento criado</p>
           <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
           <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>Partilha este link com quem queres convidar.</p>
-
           <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, fontSize: 12, color: MUTED2, wordBreak: "break-all" }}>
             {eventLink}
           </div>
-
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
             <button onClick={startCreatorResponse} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>Preencher Disponibilidade</button>
             <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "Copiado" : "Copiar Link"}</button>
@@ -928,12 +934,16 @@ export default function App() {
     );
   }
 
-  // ───────────────────────────────────────────────────────────── EVENT LANDING
+  // ─────────────────────────────────────────────────────────────── EVENT LANDING
   if (screen === "event" && currentEvent) {
     return withTheme(
       <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 460 }}>
-          <Header title={currentEvent.title} subtitle={`${currentEvent.dates.length} dia${currentEvent.dates.length !== 1 ? "s" : ""} possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${currentEvent.startTime} às ${currentEvent.endTime}`} onBack={resetToHome} />
+          <Header
+            title={currentEvent.title}
+            subtitle={`${currentEvent.dates.length} dia${currentEvent.dates.length !== 1 ? "s" : ""} possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${currentEvent.startTime} às ${currentEvent.endTime}`}
+            onBack={resetToHome}
+          />
 
           {(currentEvent.responses?.length || 0) === 0 && currentEvent.creatorName ? (
             <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18 }}>
@@ -961,7 +971,7 @@ export default function App() {
     );
   }
 
-  // ───────────────────────────────────────────────────────────── FILL
+  // ─────────────────────────────────────────────────────────────── FILL
   if (screen === "fill" && currentEvent) {
     const canSaveResponse = participantName.trim().length > 0;
     const editingLabel = currentParticipantResponse ? "Guardar Alterações" : "Guardar Disponibilidade";
@@ -976,14 +986,16 @@ export default function App() {
             right={`${selectedCount} slot${selectedCount !== 1 ? "s" : ""}`}
           />
 
+          {error && (
+            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
+              {error}
+            </div>
+          )}
+
           <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, marginBottom: 14 }}>
-            <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.7px" }}>
-              Resposta de
-            </p>
+            <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.7px" }}>Resposta de</p>
             <strong style={{ display: "block", color: TEXT, fontSize: 16 }}>{participantName || currentEvent.creatorName}</strong>
-            <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>
-              Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.
-            </p>
+            <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.</p>
           </div>
 
           <AvailabilityGrid eventDates={eventDates} slots={slots} availability={availability} onCellDown={onCellDown} onCellEnter={onCellEnter} />
@@ -1004,17 +1016,21 @@ export default function App() {
     );
   }
 
-  // ───────────────────────────────────────────────────────────── RESULTS
+  // ─────────────────────────────────────────────────────────────── RESULTS
   if (screen === "results" && currentEvent) {
     const max = currentEvent.responses?.length || 1;
 
     return withTheme(
       <div style={{ ...BASE, padding: "20px 16px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <Header title="Resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
+          <Header
+            title="Resultados"
+            subtitle={currentEvent.title}
+            onBack={() => setScreen("event")}
+            right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`}
+          />
 
           <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
-
           <BestOptionsList bestOptions={bestOptions} />
 
           {(currentEvent.responses?.length || 0) > 0 && (
@@ -1044,15 +1060,15 @@ export default function App() {
   return null;
 }
 
+// ─── Componentes (inalterados) ────────────────────────────────────────────────
+
 function ThemeToggle({ mode, onToggle }) {
   const theme = THEMES[mode] || THEMES.light;
-
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-label={mode === "dark" ? "Mudar para modo claro" : "Mudar para dark mode"}
-      title={mode === "dark" ? "Modo escuro" : "Modo claro"}
       style={{
         position: "fixed",
         top: "calc(10px + env(safe-area-inset-top))",
@@ -1100,8 +1116,8 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
           <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 12 }}>{visibleLabel}</p>
         </div>
         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-          <button onClick={onPrevious} aria-label="Período anterior" style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>‹</button>
-          <button onClick={onNext} aria-label="Próximo período" style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>›</button>
+          <button onClick={onPrevious} style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>‹</button>
+          <button onClick={onNext} style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>›</button>
         </div>
       </div>
 
@@ -1111,58 +1127,26 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
             <div key={d} style={{ fontSize: isPhone ? 10 : 13, fontWeight: 600, letterSpacing: "0.2px", color: MUTED2 }}>{d}</div>
           ))}
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: gridColumns, gridAutoRows: dayHeight, minWidth: gridMinWidth, paddingTop: isPhone ? 12 : 18 }}>
           {days.map((date, index) => {
             const key = dateToKey(date);
             const active = !!selectedDates[key];
             const showMonth = index === 0 || date.getDate() === 1;
             const isToday = key === dateToKey(new Date());
-
             return (
               <button
                 key={key}
                 onClick={() => onToggleDate(key)}
-                style={{
-                  position: "relative",
-                  background: "transparent",
-                  border: "none",
-                  color: TEXT,
-                  textAlign: "left",
-                  padding: 0,
-                  cursor: "pointer",
-                  fontFamily: "'Sora', sans-serif",
-                  minHeight: dayHeight,
-                  touchAction: "manipulation",
-                }}
+                style={{ position: "relative", background: "transparent", border: "none", color: TEXT, textAlign: "left", padding: 0, cursor: "pointer", fontFamily: "'Sora', sans-serif", minHeight: dayHeight, touchAction: "manipulation" }}
               >
                 {showMonth && (
                   <span style={{ position: "absolute", top: 0, left: 0, color: ACCENT, fontSize: isPhone ? 9 : 12, fontWeight: 600, textTransform: "uppercase" }}>
                     {MONTHS[date.getMonth()].slice(0, 3)}
                   </span>
                 )}
-
-                <span
-                  style={{
-                    position: "absolute",
-                    top: showMonth ? (isPhone ? 22 : 30) : (isPhone ? 16 : 24),
-                    left: 0,
-                    width: active ? activeSize : "auto",
-                    height: active ? activeSize : "auto",
-                    borderRadius: active ? "50%" : 0,
-                    background: active ? "#22c55e" : "transparent",
-                    color: active ? "#fff" : TEXT,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: isPhone ? 13 : 14,
-                    fontWeight: active ? 700 : 500,
-                    boxShadow: active ? "0 8px 18px rgba(34,197,94,0.22)" : "none",
-                  }}
-                >
+                <span style={{ position: "absolute", top: showMonth ? (isPhone ? 22 : 30) : (isPhone ? 16 : 24), left: 0, width: active ? activeSize : "auto", height: active ? activeSize : "auto", borderRadius: active ? "50%" : 0, background: active ? "#22c55e" : "transparent", color: active ? "#fff" : TEXT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isPhone ? 13 : 14, fontWeight: active ? 700 : 500, boxShadow: active ? "0 8px 18px rgba(34,197,94,0.22)" : "none" }}>
                   {date.getDate()}
                 </span>
-
                 {!active && isToday && (
                   <span style={{ position: "absolute", top: showMonth ? (isPhone ? 46 : 54) : (isPhone ? 40 : 48), left: 2, width: 5, height: 5, borderRadius: "50%", background: ACCENT }} />
                 )}
@@ -1192,7 +1176,6 @@ function Header({ title, subtitle, onBack, right }) {
 
 function BestOptionsList({ bestOptions }) {
   const isPhone = useIsPhone();
-
   if (!bestOptions.length) {
     return (
       <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 14, color: MUTED2, fontSize: 13, marginBottom: isPhone ? 12 : 16 }}>
@@ -1200,26 +1183,12 @@ function BestOptionsList({ bestOptions }) {
       </div>
     );
   }
-
   return (
     <div style={{ marginTop: isPhone ? 16 : 20, marginBottom: isPhone ? 12 : 16 }}>
       <p style={sectionTitle}>melhores opções</p>
       <div style={{ display: "grid", gap: 8 }}>
         {bestOptions.map((o, index) => (
-          <div
-            key={`${o.dateKey}-${o.slot.id}`}
-            style={{
-              background: SURFACE,
-              border: `1px solid ${index === 0 ? ACCENT : BORDER}` ,
-              borderRadius: 18,
-              padding: isPhone ? 12 : 14,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none",
-            }}
-          >
+          <div key={`${o.dateKey}-${o.slot.id}`} style={{ background: SURFACE, border: `1px solid ${index === 0 ? ACCENT : BORDER}`, borderRadius: 18, padding: isPhone ? 12 : 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none" }}>
             <div style={{ minWidth: 0 }}>
               <strong style={{ display: "block", fontSize: isPhone ? 13 : 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {index + 1}. {formatSlotInterval(o.dateKey, o.slot.id).date} · {formatSlotInterval(o.dateKey, o.slot.id).range}
@@ -1237,18 +1206,15 @@ function BestOptionsList({ bestOptions }) {
     </div>
   );
 }
+
 function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
   const isPhone = useIsPhone();
   const viewport = useViewportSize();
   const visibleColumns = Math.min(eventDates.length || 1, 5);
   const timeWidth = isPhone ? 42 : 58;
-  const columnWidth = isPhone
-    ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56)
-    : 62;
+  const columnWidth = isPhone ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56) : 62;
   const fillAvailableHeight = Math.max(360, viewport.height - 350);
-  const cellHeight = isPhone
-    ? clamp(Math.floor(fillAvailableHeight / Math.max(slots.length, 1)), 20, 28)
-    : 24;
+  const cellHeight = isPhone ? clamp(Math.floor(fillAvailableHeight / Math.max(slots.length, 1)), 20, 28) : 24;
   const headerHeight = isPhone ? 38 : 42;
 
   return (
@@ -1262,7 +1228,6 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
               </div>
             ))}
           </div>
-
           {eventDates.map((dateKey, di) => (
             <div key={dateKey} style={{ flexShrink: 0 }}>
               <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
@@ -1280,17 +1245,7 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
                     onMouseDown={() => onCellDown(dateKey, s.id)}
                     onMouseEnter={() => onCellEnter(dateKey, s.id)}
                     onTouchStart={() => onCellDown(dateKey, s.id)}
-                    style={{
-                      width: columnWidth,
-                      height: cellHeight,
-                      background: sel ? ACCENT : s.isHour ? SLOT_HOUR_BG : SLOT_BG,
-                      borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
-                      borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
-                      cursor: "pointer",
-                      boxSizing: "border-box",
-                      transition: "background 0.04s, transform 0.04s",
-                      touchAction: "none",
-                    }}
+                    style={{ width: columnWidth, height: cellHeight, background: sel ? ACCENT : s.isHour ? SLOT_HOUR_BG : SLOT_BG, borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent", borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none", cursor: "pointer", boxSizing: "border-box", transition: "background 0.04s", touchAction: "none" }}
                   />
                 );
               })}
@@ -1301,6 +1256,7 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
     </div>
   );
 }
+
 function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   const isPhone = useIsPhone();
   const viewport = useViewportSize();
@@ -1308,13 +1264,9 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   const peoplePanelRef = useRef(null);
   const visibleColumns = Math.min(eventDates.length || 1, 5);
   const timeWidth = isPhone ? 42 : 58;
-  const columnWidth = isPhone
-    ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56)
-    : 62;
+  const columnWidth = isPhone ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56) : 62;
   const heatmapAvailableHeight = Math.max(300, viewport.height - 360);
-  const cellHeight = isPhone
-    ? clamp(Math.floor(heatmapAvailableHeight / Math.max(slots.length, 1)), 14, 24)
-    : 24;
+  const cellHeight = isPhone ? clamp(Math.floor(heatmapAvailableHeight / Math.max(slots.length, 1)), 14, 24) : 24;
   const headerHeight = isPhone ? 36 : 42;
 
   const selectedCount = selectedSlot ? getCount(selectedSlot.dateKey, selectedSlot.slotId) : 0;
@@ -1322,17 +1274,9 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
 
   const toggleSlot = (dateKey, slot) => {
     const sameSlot = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === slot.id;
-
-    setSelectedSlot(
-      sameSlot
-        ? null
-        : { dateKey, slotId: slot.id, label: slot.label, dayOffset: slot.dayOffset }
-    );
-
+    setSelectedSlot(sameSlot ? null : { dateKey, slotId: slot.id, label: slot.label, dayOffset: slot.dayOffset });
     if (!sameSlot && isPhone) {
-      window.setTimeout(() => {
-        peoplePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 80);
+      window.setTimeout(() => { peoplePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 80);
     }
   };
 
@@ -1349,7 +1293,6 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                   </div>
                 ))}
               </div>
-
               {eventDates.map((dateKey, di) => (
                 <div key={dateKey} style={{ flexShrink: 0 }}>
                   <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
@@ -1359,9 +1302,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                   {slots.map((s) => {
                     const count = getCount(dateKey, s.id);
                     const intensity = count / max;
-                    const bg = count === 0
-                      ? (s.isHour ? SLOT_HOUR_BG : SLOT_BG)
-                      : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
+                    const bg = count === 0 ? (s.isHour ? SLOT_HOUR_BG : SLOT_BG) : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
                     const names = getNames(dateKey, s.id).join(", ");
                     const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
                     const slotInterval = formatSlotInterval(dateKey, s.id);
@@ -1372,29 +1313,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                         onClick={() => toggleSlot(dateKey, s)}
                         aria-label={`${slotInterval.date}, ${slotInterval.range}: ${count} ${count === 1 ? "disponível" : "disponíveis"}`}
                         title={`${slotInterval.date} ${slotInterval.range}: ${count}/${max}${names ? ` · ${names}` : ""}`}
-                        style={{
-                          width: columnWidth,
-                          height: cellHeight,
-                          background: bg,
-                          border: "none",
-                          borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
-                          borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
-                          boxSizing: "border-box",
-                          color: count > 0 && intensity > 0.58 ? "#fff" : TEXT,
-                          fontSize: isPhone ? 9 : 10,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontWeight: 900,
-                          cursor: "pointer",
-                          outline: isSelected ? `2px solid ${ACCENT_DARK}` : "none",
-                          outlineOffset: isSelected ? -2 : 0,
-                          boxShadow: isSelected ? "inset 0 0 0 2px #fff, 0 0 0 3px rgba(34,197,94,0.32)" : "none",
-                          transform: isSelected ? "scale(1.03)" : "scale(1)",
-                          position: "relative",
-                          zIndex: isSelected ? 2 : 1,
-                          touchAction: "manipulation",
-                        }}
+                        style={{ width: columnWidth, height: cellHeight, background: bg, border: "none", borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent", borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none", boxSizing: "border-box", color: count > 0 && intensity > 0.58 ? "#fff" : TEXT, fontSize: isPhone ? 9 : 10, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, cursor: "pointer", outline: isSelected ? `2px solid ${ACCENT_DARK}` : "none", outlineOffset: isSelected ? -2 : 0, boxShadow: isSelected ? "inset 0 0 0 2px #fff, 0 0 0 3px rgba(34,197,94,0.32)" : "none", transform: isSelected ? "scale(1.03)" : "scale(1)", position: "relative", zIndex: isSelected ? 2 : 1, touchAction: "manipulation" }}
                       />
                     );
                   })}
@@ -1403,7 +1322,6 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
             </div>
           </div>
         </div>
-
         <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: isPhone ? "center" : "flex-start", gap: 5, fontSize: 11, color: MUTED2 }}>
           <span>0</span>
           {[0.1, 0.3, 0.5, 0.7, 0.85, 1].map((v, i) => (
@@ -1412,21 +1330,15 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
           <span>{max}</span>
         </div>
       </div>
-
       <div ref={peoplePanelRef} style={{ scrollMarginTop: 18 }}>
         {(selectedSlot || !isPhone) && (
-          <SlotPeoplePanel
-            selectedSlot={selectedSlot}
-            selectedCount={selectedCount}
-            selectedNames={selectedNames}
-            onClose={() => setSelectedSlot(null)}
-            isPhone={isPhone}
-          />
+          <SlotPeoplePanel selectedSlot={selectedSlot} selectedCount={selectedCount} selectedNames={selectedNames} onClose={() => setSelectedSlot(null)} isPhone={isPhone} />
         )}
       </div>
     </div>
   );
 }
+
 function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, isPhone }) {
   if (!selectedSlot) {
     return (
@@ -1435,9 +1347,7 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
       </aside>
     );
   }
-
   const slotInterval = formatSlotInterval(selectedSlot.dateKey, selectedSlot.slotId);
-
   return (
     <aside style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: 16, marginTop: isPhone ? 14 : 0, position: isPhone ? "static" : "sticky", top: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.28)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
@@ -1449,15 +1359,12 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
           </p>
           <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
         </div>
-        <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
+        <button onClick={onClose} style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
-
       {selectedNames.length > 0 ? (
         <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
           {selectedNames.map((name) => (
-            <div key={name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>
-              {name}
-            </div>
+            <div key={name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>{name}</div>
           ))}
         </div>
       ) : (
@@ -1466,77 +1373,13 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
     </aside>
   );
 }
-const modalCardStyle = {
-  background: SURFACE,
-  border: `1px solid ${BORDER}`,
-  borderRadius: 30,
-  padding: 24,
-  boxShadow: CARD_SHADOW,
-};
 
-const eventNameCardStyle = {
-  background: SURFACE,
-  border: `1px solid ${BORDER}`,
-  borderRadius: 24,
-  padding: 16,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  boxShadow: SOFT_SHADOW,
-};
+// ─── Estilos estáticos ────────────────────────────────────────────────────────
 
-const rangeCardStyle = {
-  background: SURFACE,
-  border: `1px solid ${BORDER}`,
-  borderRadius: 24,
-  padding: 16,
-  boxShadow: SOFT_SHADOW,
-};
-
-const calendarArrowButton = {
-  background: "transparent",
-  border: "none",
-  color: TEXT,
-  cursor: "pointer",
-  width: 42,
-  height: 42,
-  borderRadius: 12,
-  fontSize: 44,
-  lineHeight: "28px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontFamily: "Arial, sans-serif",
-};
-
-const miniButton = {
-  background: SURFACE,
-  border: `1px solid ${BORDER}`,
-  color: TEXT,
-  cursor: "pointer",
-  width: 34,
-  height: 34,
-  borderRadius: 10,
-  fontSize: 16,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontFamily: "'Sora', sans-serif",
-};
-
-const labelStyle = {
-  color: MUTED2,
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-
-const sectionTitle = {
-  fontSize: 10,
-  color: MUTED,
-  fontWeight: 700,
-  textTransform: "uppercase",
-  letterSpacing: "0.7px",
-  margin: "0 0 10px",
-};
+const modalCardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 30, padding: 24, boxShadow: CARD_SHADOW };
+const eventNameCardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, boxShadow: SOFT_SHADOW };
+const rangeCardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, boxShadow: SOFT_SHADOW };
+const calendarArrowButton = { background: "transparent", border: "none", color: TEXT, cursor: "pointer", width: 42, height: 42, borderRadius: 12, fontSize: 44, lineHeight: "28px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif" };
+const miniButton = { background: SURFACE, border: `1px solid ${BORDER}`, color: TEXT, cursor: "pointer", width: 34, height: 34, borderRadius: 10, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Sora', sans-serif" };
+const labelStyle = { color: MUTED2, fontSize: 12, fontWeight: 700 };
+const sectionTitle = { fontSize: 10, color: MUTED, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px", margin: "0 0 10px" };
