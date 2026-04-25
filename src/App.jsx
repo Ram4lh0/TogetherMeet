@@ -22,7 +22,8 @@ if (typeof document !== "undefined") {
     const style = document.createElement("style");
     style.id = "pelada-mobile-style";
     style.textContent = `
-      html, body, #root { min-height: 100dvh; margin: 0; background: #f6fbf3; }
+      html, body, #root { min-height: 100dvh; margin: 0; background: var(--pelada-bg, #f6fbf3); }
+      body { transition: background 0.18s ease, color 0.18s ease; }
       * { -webkit-tap-highlight-color: transparent; }
       button, input { font: inherit; }
     `;
@@ -32,17 +33,76 @@ if (typeof document !== "undefined") {
 
 const STORAGE_KEY = "pelada_events_v1";
 
-const ACCENT = "#22c55e";
-const ACCENT_DARK = "#15803d";
-const ACCENT_SOFT = "#e9fbea";
-const BG = "#f6fbf3";
-const SURFACE = "#ffffff";
-const SURFACE2 = "#ffffff";
-const BORDER = "#e3eadf";
-const MUTED = "#94a3b8";
-const MUTED2 = "#64748b";
-const TEXT = "#102014";
-const DANGER = "#f43f5e";
+const THEME_KEY = "pelada_theme_v1";
+
+const THEMES = {
+  light: {
+    label: "claro",
+    icon: "☀️",
+    vars: {
+      "--pelada-accent": "#22c55e",
+      "--pelada-accent-dark": "#15803d",
+      "--pelada-accent-soft": "#e9fbea",
+      "--pelada-bg": "#f6fbf3",
+      "--pelada-bg-gradient": "linear-gradient(180deg, #fbfef8 0%, #eef8ec 100%)",
+      "--pelada-surface": "#ffffff",
+      "--pelada-surface-2": "#ffffff",
+      "--pelada-border": "#e3eadf",
+      "--pelada-muted": "#94a3b8",
+      "--pelada-muted-2": "#64748b",
+      "--pelada-text": "#102014",
+      "--pelada-danger": "#f43f5e",
+      "--pelada-disabled-bg": "#edf2e9",
+      "--pelada-slot-hour-bg": "#f3f8ef",
+      "--pelada-slot-bg": "#fbfdf9",
+      "--pelada-card-shadow": "0 18px 50px rgba(15,23,42,0.08)",
+      "--pelada-soft-shadow": "0 14px 34px rgba(15,23,42,0.06)",
+      "--pelada-input-shadow": "0 1px 0 rgba(16,32,20,0.02)",
+    },
+  },
+  dark: {
+    label: "escuro",
+    icon: "🌙",
+    vars: {
+      "--pelada-accent": "#38d96f",
+      "--pelada-accent-dark": "#86efac",
+      "--pelada-accent-soft": "rgba(56,217,111,0.14)",
+      "--pelada-bg": "#06110a",
+      "--pelada-bg-gradient": "linear-gradient(180deg, #07150b 0%, #030705 100%)",
+      "--pelada-surface": "#0d1710",
+      "--pelada-surface-2": "#101d14",
+      "--pelada-border": "#203327",
+      "--pelada-muted": "#6b7f72",
+      "--pelada-muted-2": "#9fb0a5",
+      "--pelada-text": "#eef8f0",
+      "--pelada-danger": "#fb7185",
+      "--pelada-disabled-bg": "#17231b",
+      "--pelada-slot-hour-bg": "#132018",
+      "--pelada-slot-bg": "#0d1710",
+      "--pelada-card-shadow": "0 18px 50px rgba(0,0,0,0.32)",
+      "--pelada-soft-shadow": "0 14px 34px rgba(0,0,0,0.24)",
+      "--pelada-input-shadow": "0 1px 0 rgba(255,255,255,0.03)",
+    },
+  },
+};
+
+const ACCENT = "var(--pelada-accent)";
+const ACCENT_DARK = "var(--pelada-accent-dark)";
+const ACCENT_SOFT = "var(--pelada-accent-soft)";
+const BG = "var(--pelada-bg)";
+const SURFACE = "var(--pelada-surface)";
+const SURFACE2 = "var(--pelada-surface-2)";
+const BORDER = "var(--pelada-border)";
+const MUTED = "var(--pelada-muted)";
+const MUTED2 = "var(--pelada-muted-2)";
+const TEXT = "var(--pelada-text)";
+const DANGER = "var(--pelada-danger)";
+const DISABLED_BG = "var(--pelada-disabled-bg)";
+const SLOT_HOUR_BG = "var(--pelada-slot-hour-bg)";
+const SLOT_BG = "var(--pelada-slot-bg)";
+const CARD_SHADOW = "var(--pelada-card-shadow)";
+const SOFT_SHADOW = "var(--pelada-soft-shadow)";
+const INPUT_SHADOW = "var(--pelada-input-shadow)";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
@@ -62,7 +122,7 @@ const MONTHS = [
 
 const BASE = {
   fontFamily: "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  background: "linear-gradient(180deg, #fbfef8 0%, #eef8ec 100%)",
+  background: "var(--pelada-bg-gradient)",
   minHeight: "100dvh",
   color: TEXT,
 };
@@ -91,7 +151,7 @@ const inputStyle = {
   fontFamily: "'Sora', sans-serif",
   outline: "none",
   boxSizing: "border-box",
-  boxShadow: "0 1px 0 rgba(16,32,20,0.02)",
+  boxShadow: INPUT_SHADOW,
 };
 
 function uid() {
@@ -246,6 +306,33 @@ function useIsPhone() {
   return isPhone;
 }
 
+function getInitialThemeMode() {
+  if (typeof window === "undefined") return "light";
+  try {
+    const stored = window.localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // Ignore storage errors in private mode.
+  }
+  return "light";
+}
+
+function applyThemeMode(mode) {
+  if (typeof document === "undefined") return;
+  const theme = THEMES[mode] || THEMES.light;
+  Object.entries(theme.vars).forEach(([name, value]) => {
+    document.documentElement.style.setProperty(name, value);
+  });
+  document.documentElement.dataset.peladaTheme = mode;
+  document.body.style.background = theme.vars["--pelada-bg"];
+}
+
+function blurActiveElement() {
+  if (typeof document === "undefined") return;
+  const active = document.activeElement;
+  if (active && typeof active.blur === "function") active.blur();
+}
+
 function useViewportSize() {
   const [size, setSize] = useState(() => {
     if (typeof window === "undefined") return { width: 390, height: 844 };
@@ -265,6 +352,10 @@ function useViewportSize() {
 
   return size;
 }
+if (typeof document !== "undefined") {
+  applyThemeMode(getInitialThemeMode());
+}
+
 export default function App() {
   const [events, setEvents] = useState({});
   const [screen, setScreen] = useState("home");
@@ -284,11 +375,34 @@ export default function App() {
   const [participantName, setParticipantName] = useState("");
   const [availability, setAvailability] = useState({});
   const [copied, setCopied] = useState(false);
+  const [themeMode, setThemeMode] = useState(getInitialThemeMode);
 
   const dragging = useRef(false);
   const dragVal = useRef(true);
+  const createSubmitting = useRef(false);
+  const responseSubmitting = useRef(false);
 
   const isPhone = useIsPhone();
+
+  useEffect(() => {
+    applyThemeMode(themeMode);
+    try {
+      window.localStorage.setItem(THEME_KEY, themeMode);
+    } catch {
+      // Ignore storage errors in private mode.
+    }
+  }, [themeMode]);
+
+  const toggleTheme = useCallback(() => {
+    setThemeMode((mode) => (mode === "dark" ? "light" : "dark"));
+  }, []);
+
+  const withTheme = useCallback((content) => (
+    <>
+      <ThemeToggle mode={themeMode} onToggle={toggleTheme} />
+      {content}
+    </>
+  ), [themeMode, toggleTheme]);
   useEffect(() => {
     const stored = loadEvents();
     setEvents(stored);
@@ -360,7 +474,10 @@ export default function App() {
   };
 
   const createEvent = () => {
+    if (createSubmitting.current) return;
+    blurActiveElement();
     if (!eventTitle.trim() || selectedDateKeys.length === 0) return;
+    createSubmitting.current = true;
 
     const id = uid();
     const newEvent = {
@@ -381,6 +498,9 @@ export default function App() {
     window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
     setCreateStep("title");
     setScreen("created");
+    window.setTimeout(() => {
+      createSubmitting.current = false;
+    }, 300);
   };
 
   const startResponse = () => {
@@ -418,8 +538,13 @@ export default function App() {
   }, []);
 
   const submitResponse = () => {
+    if (responseSubmitting.current) return;
+    blurActiveElement();
+    dragging.current = false;
+
     const name = participantName.trim();
     if (!currentEvent || !name) return;
+    responseSubmitting.current = true;
 
     const cleanAvailability = Object.fromEntries(
       Object.entries(availability).filter(([, value]) => !!value)
@@ -436,6 +561,9 @@ export default function App() {
     });
 
     setScreen("results");
+    window.setTimeout(() => {
+      responseSubmitting.current = false;
+    }, 300);
   };
 
   const getCount = (dateKey, slotId) => {
@@ -505,17 +633,17 @@ export default function App() {
 
   // ───────────────────────────────────────────────────────────── HOME
   if (screen === "home") {
-    return (
+    return withTheme(
       <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 440 }}>
           <div style={{ textAlign: "center", marginBottom: 34 }}>
-            <div style={{ width: 68, height: 68, background: ACCENT_SOFT, borderRadius: 24, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}`, boxShadow: "0 16px 42px rgba(15,23,42,0.06)" }}>⚽</div>
+            <div style={{ width: 68, height: 68, background: ACCENT_SOFT, borderRadius: 24, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}`, boxShadow: SOFT_SHADOW }}>⚽</div>
             <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-1px" }}>pelada</h1>
             <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>cria eventos e encontra a melhor hora</p>
           </div>
 
           {missingEventId && (
-            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}55`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
+            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
               Este evento não existe neste browser. Com Supabase isto passa a funcionar entre dispositivos.
             </div>
           )}
@@ -565,7 +693,7 @@ export default function App() {
     const crossesMidnight = parseTime(endTime) <= parseTime(startTime);
 
     if (createStep === "title") {
-      return (
+      return withTheme(
         <div style={{ ...BASE, minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 18px" }}>
           <div style={{ width: "100%", maxWidth: 430 }}>
             <button onClick={resetToHome} style={{ ...miniButton, marginBottom: 18 }}>←</button>
@@ -603,7 +731,7 @@ export default function App() {
                   ...buttonBase,
                   width: "100%",
                   marginTop: 14,
-                  background: canContinueTitle ? ACCENT : "#edf2e9",
+                  background: canContinueTitle ? ACCENT : DISABLED_BG,
                   color: canContinueTitle ? "#fff" : MUTED2,
                   boxShadow: canContinueTitle ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
                 }}
@@ -616,7 +744,7 @@ export default function App() {
       );
     }
 
-    return (
+    return withTheme(
       <div style={{ ...BASE, padding: isPhone ? "16px 12px 28px" : "22px 16px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           <Header
@@ -731,11 +859,12 @@ export default function App() {
             </div>
 
             <button
+              onPointerUp={(e) => { e.preventDefault(); createEvent(); }}
               onClick={createEvent}
               disabled={!canCreate}
               style={{
                 ...buttonBase,
-                background: canCreate ? ACCENT : "#edf2e9",
+                background: canCreate ? ACCENT : DISABLED_BG,
                 color: canCreate ? "#fff" : MUTED2,
                 boxShadow: canCreate ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
               }}
@@ -750,7 +879,7 @@ export default function App() {
 
   // ───────────────────────────────────────────────────────────── CREATED
   if (screen === "created" && currentEvent) {
-    return (
+    return withTheme(
       <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 520, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 28, padding: 22 }}>
           <p style={{ margin: 0, color: ACCENT, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>evento criado</p>
@@ -772,7 +901,7 @@ export default function App() {
 
   // ───────────────────────────────────────────────────────────── EVENT LANDING
   if (screen === "event" && currentEvent) {
-    return (
+    return withTheme(
       <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 460 }}>
           <Header title={currentEvent.title} subtitle={`${currentEvent.dates.length} dia${currentEvent.dates.length !== 1 ? "s" : ""} possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${currentEvent.startTime} às ${currentEvent.endTime}`} onBack={resetToHome} />
@@ -798,7 +927,7 @@ export default function App() {
     const canSaveResponse = participantName.trim().length > 0;
     const editingLabel = currentParticipantResponse ? "guardar alterações" : "guardar resposta";
 
-    return (
+    return withTheme(
       <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: isPhone ? "16px 12px calc(92px + env(safe-area-inset-bottom))" : "20px 16px", userSelect: "none" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header
@@ -827,6 +956,8 @@ export default function App() {
 
           <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", position: isPhone ? "fixed" : "static", left: isPhone ? 12 : "auto", right: isPhone ? 12 : "auto", bottom: isPhone ? "calc(12px + env(safe-area-inset-bottom))" : "auto", zIndex: 20 }}>
             <button
+              onPointerDown={(e) => { e.stopPropagation(); dragging.current = false; }}
+              onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); submitResponse(); }}
               onClick={submitResponse}
               disabled={!canSaveResponse}
               style={{ ...buttonBase, background: canSaveResponse ? ACCENT : SURFACE, color: canSaveResponse ? "#fff" : MUTED2, paddingInline: 34, width: isPhone ? "100%" : "auto", boxShadow: isPhone ? "0 14px 30px rgba(0,0,0,0.45)" : "none" }}
@@ -843,7 +974,7 @@ export default function App() {
   if (screen === "results" && currentEvent) {
     const max = currentEvent.responses?.length || 1;
 
-    return (
+    return withTheme(
       <div style={{ ...BASE, padding: "20px 16px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header title="resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
@@ -869,7 +1000,7 @@ export default function App() {
                 editar a minha disponibilidade
               </button>
             )}
-            <button onClick={() => { setParticipantName(""); setAvailability({}); setScreen("event"); }} style={{ ...buttonBase, background: "transparent", color: ACCENT, border: `1.5px solid ${ACCENT}40` }}>+ adicionar resposta</button>
+            <button onClick={() => { setParticipantName(""); setAvailability({}); setScreen("event"); }} style={{ ...buttonBase, background: "transparent", color: ACCENT, border: `1.5px solid ${BORDER}` }}>+ adicionar resposta</button>
             <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "copiado" : "copiar link"}</button>
           </div>
         </div>
@@ -878,6 +1009,41 @@ export default function App() {
   }
 
   return null;
+}
+
+function ThemeToggle({ mode, onToggle }) {
+  const theme = THEMES[mode] || THEMES.light;
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={mode === "dark" ? "Mudar para modo claro" : "Mudar para dark mode"}
+      title={mode === "dark" ? "Modo escuro" : "Modo claro"}
+      style={{
+        position: "fixed",
+        top: "calc(10px + env(safe-area-inset-top))",
+        right: "calc(10px + env(safe-area-inset-right))",
+        zIndex: 999,
+        width: 42,
+        height: 42,
+        borderRadius: 999,
+        border: `1px solid ${BORDER}`,
+        background: SURFACE2,
+        color: TEXT,
+        boxShadow: SOFT_SHADOW,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        fontSize: 18,
+        fontFamily: "'Sora', sans-serif",
+        touchAction: "manipulation",
+      }}
+    >
+      <span aria-hidden="true">{theme.icon}</span>
+    </button>
+  );
 }
 
 function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPrevious, onNext }) {
@@ -890,7 +1056,7 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
   const activeSize = isPhone ? 38 : 48;
 
   return (
-    <div style={{ background: SURFACE, color: TEXT, borderRadius: isPhone ? 26 : 30, padding: isPhone ? "18px 14px 22px" : "26px 28px 34px", border: `1px solid ${BORDER}`, boxShadow: "0 18px 50px rgba(15,23,42,0.08)", overflow: "hidden" }}>
+    <div style={{ background: SURFACE, color: TEXT, borderRadius: isPhone ? 26 : 30, padding: isPhone ? "18px 14px 22px" : "26px 28px 34px", border: `1px solid ${BORDER}`, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: isPhone ? 18 : 28 }}>
         <div style={{ minWidth: 0 }}>
           <h3 style={{ margin: 0, fontSize: isPhone ? 18 : 24, fontWeight: 600, letterSpacing: "-0.5px" }}>Que dias queres disponibilizar?</h3>
@@ -934,7 +1100,7 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
                 }}
               >
                 {showMonth && (
-                  <span style={{ position: "absolute", top: 0, left: 0, color: "#22c55e", fontSize: isPhone ? 9 : 12, fontWeight: 600, textTransform: "uppercase" }}>
+                  <span style={{ position: "absolute", top: 0, left: 0, color: ACCENT, fontSize: isPhone ? 9 : 12, fontWeight: 600, textTransform: "uppercase" }}>
                     {MONTHS[date.getMonth()].slice(0, 3)}
                   </span>
                 )}
@@ -961,7 +1127,7 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
                 </span>
 
                 {!active && isToday && (
-                  <span style={{ position: "absolute", top: showMonth ? (isPhone ? 46 : 54) : (isPhone ? 40 : 48), left: 2, width: 5, height: 5, borderRadius: "50%", background: "#22c55e" }} />
+                  <span style={{ position: "absolute", top: showMonth ? (isPhone ? 46 : 54) : (isPhone ? 40 : 48), left: 2, width: 5, height: 5, borderRadius: "50%", background: ACCENT }} />
                 )}
               </button>
             );
@@ -1080,7 +1246,7 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
                     style={{
                       width: columnWidth,
                       height: cellHeight,
-                      background: sel ? ACCENT : s.isHour ? "#f3f8ef" : "#fbfdf9",
+                      background: sel ? ACCENT : s.isHour ? SLOT_HOUR_BG : SLOT_BG,
                       borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
                       borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
                       cursor: "pointer",
@@ -1136,7 +1302,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   return (
     <div style={{ display: isPhone ? "block" : "grid", gridTemplateColumns: "minmax(0, 1fr) 290px", gap: 16, alignItems: "start", marginTop: isPhone ? 14 : 18 }}>
       <div>
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 24, border: `1px solid ${BORDER}`, background: SURFACE2, boxShadow: "0 16px 42px rgba(15,23,42,0.06)" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 24, border: `1px solid ${BORDER}`, background: SURFACE2, boxShadow: SOFT_SHADOW }}>
           <div style={{ display: "flex", justifyContent: "center", minWidth: "100%", padding: isPhone ? "8px 8px 10px" : "10px 10px 12px" }}>
             <div style={{ display: "flex", width: "max-content" }}>
               <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
@@ -1157,7 +1323,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                     const count = getCount(dateKey, s.id);
                     const intensity = count / max;
                     const bg = count === 0
-                      ? (s.isHour ? "#f3f8ef" : "#fbfdf9")
+                      ? (s.isHour ? SLOT_HOUR_BG : SLOT_BG)
                       : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
                     const names = getNames(dateKey, s.id).join(", ");
                     const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
@@ -1227,7 +1393,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
 function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, isPhone }) {
   if (!selectedSlot) {
     return (
-      <aside style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, color: MUTED2, fontSize: 13, position: "sticky", top: 16, boxShadow: "0 16px 42px rgba(15,23,42,0.06)" }}>
+      <aside style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, color: MUTED2, fontSize: 13, position: "sticky", top: 16, boxShadow: SOFT_SHADOW }}>
         Carrega num slot do heatmap para veres quem está disponível.
       </aside>
     );
@@ -1244,7 +1410,7 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
           <p style={{ margin: "4px 0 0", color: TEXT, fontSize: 14, fontWeight: 900 }}>
             {slotInterval.range}{slotInterval.endDate ? ` · acaba em ${slotInterval.endDate}` : ""}
           </p>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
+          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
@@ -1268,7 +1434,7 @@ const modalCardStyle = {
   border: `1px solid ${BORDER}`,
   borderRadius: 30,
   padding: 24,
-  boxShadow: "0 24px 70px rgba(15, 23, 42, 0.10)",
+  boxShadow: CARD_SHADOW,
 };
 
 const eventNameCardStyle = {
@@ -1280,7 +1446,7 @@ const eventNameCardStyle = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 12,
-  boxShadow: "0 14px 34px rgba(15,23,42,0.06)",
+  boxShadow: SOFT_SHADOW,
 };
 
 const rangeCardStyle = {
@@ -1288,7 +1454,7 @@ const rangeCardStyle = {
   border: `1px solid ${BORDER}`,
   borderRadius: 24,
   padding: 16,
-  boxShadow: "0 14px 34px rgba(15,23,42,0.06)",
+  boxShadow: SOFT_SHADOW,
 };
 
 const calendarArrowButton = {
