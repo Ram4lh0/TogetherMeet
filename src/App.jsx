@@ -21,6 +21,27 @@ const MUTED2 = "#777";
 const TEXT = "#f2f2f2";
 const DANGER = "#ff6b6b";
 
+if (typeof document !== "undefined") {
+  if (!document.querySelector('meta[name="viewport"]')) {
+    const meta = document.createElement("meta");
+    meta.name = "viewport";
+    meta.content = "width=device-width, initial-scale=1, viewport-fit=cover";
+    document.head.appendChild(meta);
+  }
+
+  if (!document.getElementById("pelada-mobile-reset")) {
+    const style = document.createElement("style");
+    style.id = "pelada-mobile-reset";
+    style.textContent = `
+      html, body, #root { min-height: 100%; background: ${BG}; }
+      body { margin: 0; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+      * { -webkit-tap-highlight-color: transparent; }
+      input, button { -webkit-appearance: none; }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
   "Janeiro",
@@ -60,7 +81,8 @@ const inputStyle = {
   border: `1.5px solid ${BORDER}`,
   borderRadius: 14,
   padding: "14px 16px",
-  fontSize: 15,
+  fontSize: 16,
+  lineHeight: "20px",
   color: TEXT,
   fontFamily: "'Sora', sans-serif",
   outline: "none",
@@ -177,7 +199,26 @@ function saveEvents(events) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 720px)").matches : false
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 720px)");
+    const update = () => setIsMobile(media.matches);
+
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return isMobile;
+}
+
 export default function App() {
+  const isMobile = useIsMobile();
   const [events, setEvents] = useState({});
   const [screen, setScreen] = useState("home");
   const [currentEventId, setCurrentEventId] = useState(null);
@@ -196,6 +237,7 @@ export default function App() {
   const [participantName, setParticipantName] = useState("");
   const [availability, setAvailability] = useState({});
   const [copied, setCopied] = useState(false);
+  const [selectedResultSlot, setSelectedResultSlot] = useState(null);
 
   const dragging = useRef(false);
   const dragVal = useRef(true);
@@ -229,6 +271,10 @@ export default function App() {
       window.removeEventListener("touchend", stop);
     };
   }, []);
+
+  useEffect(() => {
+    setSelectedResultSlot(null);
+  }, [screen, currentEventId]);
 
   const currentEvent = currentEventId ? events[currentEventId] : null;
 
@@ -373,6 +419,24 @@ export default function App() {
     return rows.sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id)).slice(0, 6);
   }, [currentEvent, eventDates, slots]);
 
+  const selectedSlotDetails = useMemo(() => {
+    if (!currentEvent || !selectedResultSlot) return null;
+
+    const slot = slots.find((s) => s.id === selectedResultSlot.slotId);
+    if (!slot) return null;
+
+    const names = (currentEvent.responses || [])
+      .filter((r) => r.availability?.[slotKey(selectedResultSlot.dateKey, selectedResultSlot.slotId)])
+      .map((r) => r.name);
+
+    return {
+      dateKey: selectedResultSlot.dateKey,
+      slot,
+      names,
+      count: names.length,
+    };
+  }, [currentEvent, selectedResultSlot, slots]);
+
   const selectedCount = Object.values(availability).filter(Boolean).length;
 
   const copyLink = async () => {
@@ -396,7 +460,7 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── HOME
   if (screen === "home") {
     return (
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))" : 24 }}>
         <div style={{ width: "100%", maxWidth: 440 }}>
           <div style={{ textAlign: "center", marginBottom: 34 }}>
             <div style={{ width: 68, height: 68, background: SURFACE, borderRadius: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}` }}>⚽</div>
@@ -454,7 +518,7 @@ export default function App() {
     const crossesMidnight = parseTime(endTime) <= parseTime(startTime);
 
     return (
-      <div style={{ ...BASE, padding: "22px 16px" }}>
+      <div style={{ ...BASE, padding: isMobile ? "calc(16px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom))" : "22px 16px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <Header title="criar evento" subtitle="define dias e horas possíveis" onBack={resetToHome} />
 
@@ -503,7 +567,7 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── CREATED
   if (screen === "created" && currentEvent) {
     return (
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))" : 24 }}>
         <div style={{ width: "100%", maxWidth: 520, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 22 }}>
           <p style={{ margin: 0, color: ACCENT, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>evento criado</p>
           <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
@@ -525,7 +589,7 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── EVENT LANDING
   if (screen === "event" && currentEvent) {
     return (
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))" : 24 }}>
         <div style={{ width: "100%", maxWidth: 460 }}>
           <Header title={currentEvent.title} subtitle={`${currentEvent.dates.length} dia${currentEvent.dates.length !== 1 ? "s" : ""} possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${currentEvent.startTime} às ${currentEvent.endTime}`} onBack={resetToHome} />
 
@@ -548,13 +612,13 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── FILL
   if (screen === "fill" && currentEvent) {
     return (
-      <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: "20px 16px", userSelect: "none" }}>
+      <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: isMobile ? "calc(14px + env(safe-area-inset-top)) 10px calc(90px + env(safe-area-inset-bottom))" : "20px 16px", userSelect: "none" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header title={participantName} subtitle="arrasta para selecionar os slots em que podes" onBack={() => setScreen("event")} right={`${selectedCount} slot${selectedCount !== 1 ? "s" : ""}`} />
           <AvailabilityGrid eventDates={eventDates} slots={slots} availability={availability} onCellDown={onCellDown} onCellEnter={onCellEnter} />
 
-          <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={submitResponse} style={{ ...buttonBase, background: ACCENT, color: "#000", paddingInline: 34 }}>guardar resposta</button>
+          <div style={{ marginTop: 24, display: "flex", justifyContent: isMobile ? "stretch" : "flex-end" }}>
+            <button onClick={submitResponse} style={{ ...buttonBase, background: ACCENT, color: "#000", paddingInline: 34, width: isMobile ? "100%" : "auto", minHeight: 50 }}>guardar resposta</button>
           </div>
         </div>
       </div>
@@ -566,11 +630,26 @@ export default function App() {
     const max = currentEvent.responses?.length || 1;
 
     return (
-      <div style={{ ...BASE, padding: "20px 16px" }}>
+      <div style={{ ...BASE, padding: isMobile ? "calc(14px + env(safe-area-inset-top)) 10px calc(130px + env(safe-area-inset-bottom))" : "20px 16px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header title="resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
 
-          <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
+          <Heatmap
+            eventDates={eventDates}
+            slots={slots}
+            max={max}
+            getCount={getCount}
+            getNames={getNames}
+            selectedSlot={selectedResultSlot}
+            onSelectSlot={(dateKey, slot) => setSelectedResultSlot({ dateKey, slotId: slot.id })}
+          />
+
+          <SlotDetailsDrawer
+            slotDetails={selectedSlotDetails}
+            totalResponses={currentEvent.responses?.length || 0}
+            onClose={() => setSelectedResultSlot(null)}
+            isMobile={isMobile}
+          />
 
           {bestOptions.length > 0 && (
             <div style={{ marginTop: 26 }}>
@@ -613,14 +692,17 @@ export default function App() {
 }
 
 function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPrevious, onNext }) {
+  const isMobile = useIsMobile();
   const days = getRollingCalendarDays(startDate, 4);
   const visibleLabel = `${MONTHS[startDate.getMonth()].slice(0, 3)} ${startDate.getFullYear()} → ${MONTHS[days[days.length - 1].getMonth()].slice(0, 3)} ${days[days.length - 1].getFullYear()}`;
+  const dayMin = isMobile ? "42px" : "88px";
+  const rowHeight = isMobile ? 64 : 82;
 
   return (
-    <div style={{ background: "#fff", color: "#000", borderRadius: 24, padding: "26px 28px 34px", border: "1px solid #eeeeee", boxShadow: "0 18px 50px rgba(0,0,0,0.18)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 28 }}>
+    <div style={{ background: "#fff", color: "#000", borderRadius: isMobile ? 20 : 24, padding: isMobile ? "18px 14px 22px" : "26px 28px 34px", border: "1px solid #eeeeee", boxShadow: "0 18px 50px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: 12, marginBottom: isMobile ? 18 : 28 }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.5px" }}>Que dias queres disponibilizar?</h3>
+          <h3 style={{ margin: 0, fontSize: isMobile ? 18 : 24, fontWeight: 500, letterSpacing: "-0.5px", lineHeight: 1.15 }}>Que dias queres disponibilizar?</h3>
           <p style={{ margin: "6px 0 0", color: "#777", fontSize: 12 }}>{visibleLabel}</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -630,13 +712,13 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
       </div>
 
       <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(88px, 1fr))", gap: 0, borderBottom: "1px solid #eee", paddingBottom: 20, minWidth: 680 }}>
-          {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
-            <div key={d} style={{ fontSize: 13, fontWeight: 500, letterSpacing: "0.2px" }}>{d}</div>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(7, minmax(${dayMin}, 1fr))`, gap: 0, borderBottom: "1px solid #eee", paddingBottom: isMobile ? 12 : 20, minWidth: isMobile ? 0 : 680 }}>
+          {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((d) => (
+            <div key={d} style={{ fontSize: isMobile ? 10 : 13, fontWeight: 500, letterSpacing: "0.2px" }}>{d}</div>
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(88px, 1fr))", gridAutoRows: 82, minWidth: 680, paddingTop: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(7, minmax(${dayMin}, 1fr))`, gridAutoRows: rowHeight, minWidth: isMobile ? 0 : 680, paddingTop: isMobile ? 12 : 18 }}>
           {days.map((date, index) => {
             const key = dateToKey(date);
             const active = !!selectedDates[key];
@@ -656,7 +738,7 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
                   padding: 0,
                   cursor: "pointer",
                   fontFamily: "'Sora', sans-serif",
-                  minHeight: 82,
+                  minHeight: rowHeight,
                 }}
               >
                 {showMonth && (
@@ -670,8 +752,8 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
                     position: "absolute",
                     top: showMonth ? 30 : 24,
                     left: 0,
-                    width: active ? 48 : "auto",
-                    height: active ? 48 : "auto",
+                    width: active ? (isMobile ? 36 : 48) : "auto",
+                    height: active ? (isMobile ? 36 : 48) : "auto",
                     borderRadius: active ? "50%" : 0,
                     background: active ? "#009e57" : "transparent",
                     color: active ? "#fff" : "#000",
@@ -714,12 +796,17 @@ function Header({ title, subtitle, onBack, right }) {
 }
 
 function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
+  const isMobile = useIsMobile();
+  const dayWidth = isMobile ? 56 : 62;
+  const timeWidth = isMobile ? 50 : 58;
+  const cellHeight = isMobile ? 28 : 24;
+
   return (
     <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <div style={{ display: "flex", minWidth: "max-content" }}>
         <div style={{ flexShrink: 0, paddingTop: 42 }}>
           {slots.map((s) => (
-            <div key={s.id} style={{ height: 24, width: 58, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
+            <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
               {s.label}{s.dayOffset ? "+1" : ""}
             </div>
           ))}
@@ -727,7 +814,7 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
 
         {eventDates.map((dateKey, di) => (
           <div key={dateKey} style={{ flexShrink: 0 }}>
-            <div style={{ height: 42, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: 62 }}>
+            <div style={{ height: 42, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: dayWidth }}>
               <strong style={{ fontSize: 12 }}>{formatDateShort(dateKey)}</strong>
               <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
             </div>
@@ -743,14 +830,15 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
                   onMouseEnter={() => onCellEnter(dateKey, s.id)}
                   onTouchStart={() => onCellDown(dateKey, s.id)}
                   style={{
-                    width: 62,
-                    height: 24,
+                    width: dayWidth,
+                    height: cellHeight,
                     background: sel ? ACCENT : s.isHour ? "#0c0c0c" : SURFACE,
                     borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
                     borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
                     cursor: "crosshair",
                     boxSizing: "border-box",
                     transition: "background 0.04s",
+                    touchAction: "none",
                   }}
                 />
               );
@@ -762,14 +850,19 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
   );
 }
 
-function Heatmap({ eventDates, slots, max, getCount, getNames }) {
+function Heatmap({ eventDates, slots, max, getCount, getNames, selectedSlot, onSelectSlot }) {
+  const isMobile = useIsMobile();
+  const dayWidth = isMobile ? 56 : 62;
+  const timeWidth = isMobile ? 50 : 58;
+  const cellHeight = isMobile ? 28 : 24;
+
   return (
     <div>
       <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", minWidth: "max-content" }}>
           <div style={{ flexShrink: 0, paddingTop: 42 }}>
             {slots.map((s) => (
-              <div key={s.id} style={{ height: 24, width: 58, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
+              <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
                 {s.label}{s.dayOffset ? "+1" : ""}
               </div>
             ))}
@@ -777,7 +870,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
 
           {eventDates.map((dateKey, di) => (
             <div key={dateKey} style={{ flexShrink: 0 }}>
-              <div style={{ height: 42, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: 62 }}>
+              <div style={{ height: 42, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: dayWidth }}>
                 <strong style={{ fontSize: 12 }}>{formatDateShort(dateKey)}</strong>
                 <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
               </div>
@@ -786,13 +879,20 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                 const intensity = count / max;
                 const bg = count === 0 ? (s.isHour ? "#0c0c0c" : SURFACE) : `rgba(201, 240, 0, ${0.12 + intensity * 0.88})`;
                 const names = getNames(dateKey, s.id).join(", ");
+                const selected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
                 return (
                   <div
                     key={s.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectSlot?.(dateKey, s)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") onSelectSlot?.(dateKey, s);
+                    }}
                     title={`${formatDateLong(dateKey)} ${s.label}${s.dayOffset ? " +1" : ""}: ${count}/${max}${names ? ` · ${names}` : ""}`}
                     style={{
-                      width: 62,
-                      height: 24,
+                      width: dayWidth,
+                      height: cellHeight,
                       background: bg,
                       borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
                       borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
@@ -803,6 +903,11 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                       alignItems: "center",
                       justifyContent: "center",
                       fontWeight: 800,
+                      cursor: "pointer",
+                      outline: selected ? `2px solid ${ACCENT}` : "none",
+                      outlineOffset: -2,
+                      boxShadow: selected ? "inset 0 0 0 1px #000" : "none",
+                      touchAction: "manipulation",
                     }}
                   >
                     {count > 0 ? count : ""}
@@ -822,6 +927,87 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
         <span>{max}</span>
       </div>
     </div>
+  );
+}
+
+function SlotDetailsDrawer({ slotDetails, totalResponses, onClose, isMobile }) {
+  if (!slotDetails) return null;
+
+  const hasNames = slotDetails.names.length > 0;
+  const time = `${slotDetails.slot.label}${slotDetails.slot.dayOffset ? " +1" : ""}`;
+  const panelStyle = isMobile
+    ? {
+        position: "fixed",
+        left: 10,
+        right: 10,
+        bottom: "calc(10px + env(safe-area-inset-bottom))",
+        maxHeight: "46vh",
+        overflowY: "auto",
+        zIndex: 30,
+        background: SURFACE2,
+        border: `1px solid ${BORDER}`,
+        borderRadius: 22,
+        padding: 16,
+        boxShadow: "0 -12px 45px rgba(0,0,0,0.45)",
+      }
+    : {
+        position: "fixed",
+        top: 0,
+        right: 0,
+        height: "100vh",
+        width: 360,
+        boxSizing: "border-box",
+        zIndex: 30,
+        background: SURFACE2,
+        borderLeft: `1px solid ${BORDER}`,
+        padding: "calc(22px + env(safe-area-inset-top)) 22px calc(22px + env(safe-area-inset-bottom))",
+        boxShadow: "-18px 0 60px rgba(0,0,0,0.45)",
+        overflowY: "auto",
+      };
+
+  return (
+    <aside style={panelStyle} aria-live="polite">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+        <div>
+          <p style={{ margin: "0 0 6px", color: ACCENT, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+            slot selecionado
+          </p>
+          <h3 style={{ margin: 0, fontSize: 20, lineHeight: 1.2 }}>
+            {formatDateLong(slotDetails.dateKey)}
+          </h3>
+          <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>{time}</p>
+        </div>
+        <button onClick={onClose} aria-label="Fechar" style={{ ...miniButton, width: 36, height: 36 }}>×</button>
+      </div>
+
+      <div style={{ marginTop: 16, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <strong style={{ color: ACCENT, fontSize: 32, lineHeight: 1 }}>{slotDetails.count}</strong>
+          <span style={{ color: MUTED2, fontSize: 13 }}>/ {totalResponses} disponíveis</span>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <p style={sectionTitle}>pessoas disponíveis</p>
+        {hasNames ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {slotDetails.names.map((name) => (
+              <div key={name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: "12px 13px", fontSize: 14, fontWeight: 650 }}>
+                {name}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 14, color: MUTED2, fontSize: 13 }}>
+            Ninguém está disponível neste slot.
+          </div>
+        )}
+      </div>
+
+      <p style={{ margin: "16px 0 0", color: MUTED2, fontSize: 11 }}>
+        Toca noutro quadrado do heatmap para mudar o slot.
+      </p>
+    </aside>
   );
 }
 
