@@ -6,7 +6,8 @@ if (typeof document !== "undefined" && !document.getElementById("pelada-font")) 
   const link = document.createElement("link");
   link.id = "pelada-font";
   link.rel = "stylesheet";
-  link.href = "https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap";
+  link.href =
+    "https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap";
   document.head.appendChild(link);
 }
 
@@ -103,9 +104,20 @@ const SOFT_SHADOW = "var(--pelada-soft-shadow)";
 const INPUT_SHADOW = "var(--pelada-input-shadow)";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
 const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
 ];
 
 const BASE = {
@@ -144,10 +156,6 @@ const inputStyle = {
 
 // ─── Supabase helpers ────────────────────────────────────────────────────────
 
-/**
- * Carrega um evento do Supabase pelo ID.
- * Retorna o evento no mesmo formato que o estado local usa, ou null se não existir.
- */
 async function fetchEventById(id) {
   const { data: ev, error } = await supabase
     .from("events")
@@ -175,6 +183,7 @@ async function fetchEventById(id) {
         .eq("response_id", r.id);
 
       const availability = {};
+
       (slots || []).forEach(({ date, slot_minutes }) => {
         availability[`${date}|${slot_minutes}`] = true;
       });
@@ -201,9 +210,6 @@ async function fetchEventById(id) {
   };
 }
 
-/**
- * Insere um novo evento no Supabase.
- */
 async function insertEvent(event) {
   const { error } = await supabase.from("events").insert({
     id: event.id,
@@ -212,24 +218,22 @@ async function insertEvent(event) {
     start_time: event.startTime,
     end_time: event.endTime,
   });
+
   if (error) throw error;
 
   if (event.dates.length > 0) {
     const { error: datesError } = await supabase.from("event_dates").insert(
-      event.dates.map((date) => ({ event_id: event.id, date }))
+      event.dates.map((date) => ({
+        event_id: event.id,
+        date,
+      }))
     );
+
     if (datesError) throw datesError;
   }
 }
 
-/**
- * Guarda (upsert) a disponibilidade de um participante.
- * Apaga os slots antigos e insere os novos.
- */
 async function upsertResponse(eventId, participantName, availability) {
-  const nameKey = normalizeName(participantName);
-
-  // Verificar se já existe resposta para este nome
   const { data: existing } = await supabase
     .from("responses")
     .select("id")
@@ -241,34 +245,48 @@ async function upsertResponse(eventId, participantName, availability) {
 
   if (existing) {
     responseId = existing.id;
-    // Apagar slots antigos
-    await supabase.from("availability_slots").delete().eq("response_id", responseId);
-    // Atualizar timestamp
+
+    await supabase
+      .from("availability_slots")
+      .delete()
+      .eq("response_id", responseId);
+
     await supabase
       .from("responses")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", responseId);
   } else {
-    // Criar nova resposta
     const { data: newResponse, error } = await supabase
       .from("responses")
-      .insert({ event_id: eventId, participant_name: participantName })
+      .insert({
+        event_id: eventId,
+        participant_name: participantName,
+      })
       .select("id")
       .single();
+
     if (error) throw error;
+
     responseId = newResponse.id;
   }
 
-  // Inserir slots novos
   const slots = Object.entries(availability)
     .filter(([, val]) => !!val)
     .map(([key]) => {
       const [date, slot_minutes] = key.split("|");
-      return { response_id: responseId, date, slot_minutes: Number(slot_minutes) };
+
+      return {
+        response_id: responseId,
+        date,
+        slot_minutes: Number(slot_minutes),
+      };
     });
 
   if (slots.length > 0) {
-    const { error: slotsError } = await supabase.from("availability_slots").insert(slots);
+    const { error: slotsError } = await supabase
+      .from("availability_slots")
+      .insert(slots);
+
     if (slotsError) throw slotsError;
   }
 }
@@ -336,10 +354,13 @@ function timeLabel(totalMinutes) {
 function formatSlotInterval(dateKey, slotId, duration = 30) {
   const startTotal = Number(slotId);
   const endTotal = startTotal + duration;
+
   const startDayOffset = Math.floor(startTotal / 1440);
   const endDayOffset = Math.floor(endTotal / 1440);
+
   const startDateKey = dateToKey(addDays(keyToDate(dateKey), startDayOffset));
   const endDateKey = dateToKey(addDays(keyToDate(dateKey), endDayOffset));
+
   const start = timeLabel(startTotal);
   const end = timeLabel(endTotal);
 
@@ -361,8 +382,11 @@ function clamp(value, min, max) {
 function generateSlots(startTime, endTime) {
   const start = parseTime(startTime);
   let end = parseTime(endTime);
+
   if (end <= start) end += 1440;
+
   const slots = [];
+
   for (let m = start; m < end; m += 30) {
     slots.push({
       id: String(m),
@@ -371,6 +395,7 @@ function generateSlots(startTime, endTime) {
       isHour: m % 60 === 0,
     });
   }
+
   return slots;
 }
 
@@ -380,19 +405,26 @@ function slotKey(dateKey, slotId) {
 
 function getInitialThemeMode() {
   if (typeof window === "undefined") return "light";
+
   try {
     const stored = window.localStorage.getItem(THEME_KEY);
     if (stored === "light" || stored === "dark") return stored;
-  } catch { /* ignore */ }
+  } catch {
+    // ignore
+  }
+
   return "light";
 }
 
 function applyThemeMode(mode) {
   if (typeof document === "undefined") return;
+
   const theme = THEMES[mode] || THEMES.light;
+
   Object.entries(theme.vars).forEach(([name, value]) => {
     document.documentElement.style.setProperty(name, value);
   });
+
   document.documentElement.dataset.peladaTheme = mode;
   document.documentElement.style.colorScheme = mode === "dark" ? "dark" : "light";
   document.body.style.background = theme.vars["--pelada-bg"];
@@ -400,8 +432,12 @@ function applyThemeMode(mode) {
 
 function blurActiveElement() {
   if (typeof document === "undefined") return;
+
   const active = document.activeElement;
-  if (active && typeof active.blur === "function") active.blur();
+
+  if (active && typeof active.blur === "function") {
+    active.blur();
+  }
 }
 
 function useIsPhone() {
@@ -409,12 +445,16 @@ function useIsPhone() {
     if (typeof window === "undefined") return true;
     return window.innerWidth <= 760;
   });
+
   useEffect(() => {
     const onResize = () => setIsPhone(window.innerWidth <= 760);
+
     onResize();
     window.addEventListener("resize", onResize);
+
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
   return isPhone;
 }
 
@@ -423,16 +463,25 @@ function useViewportSize() {
     if (typeof window === "undefined") return { width: 390, height: 844 };
     return { width: window.innerWidth, height: window.innerHeight };
   });
+
   useEffect(() => {
-    const onResize = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    const onResize = () => {
+      setSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
     onResize();
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
+
     return () => {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
     };
   }, []);
+
   return size;
 }
 
@@ -448,7 +497,6 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Create event
   const [eventTitle, setEventTitle] = useState("");
   const [creatorName, setCreatorName] = useState("");
   const [createStep, setCreateStep] = useState("title");
@@ -457,7 +505,6 @@ export default function App() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("22:30");
 
-  // Join/respond
   const [eventCode, setEventCode] = useState("");
   const [participantName, setParticipantName] = useState("");
   const [availability, setAvailability] = useState({});
@@ -474,45 +521,58 @@ export default function App() {
 
   useEffect(() => {
     applyThemeMode(themeMode);
-    try { window.localStorage.setItem(THEME_KEY, themeMode); } catch { /* ignore */ }
+
+    try {
+      window.localStorage.setItem(THEME_KEY, themeMode);
+    } catch {
+      // ignore
+    }
   }, [themeMode]);
 
   const toggleTheme = useCallback(() => {
     setThemeMode((mode) => (mode === "dark" ? "light" : "dark"));
   }, []);
 
-  const withTheme = useCallback((content) => (
-    <>
-      <ThemeToggle mode={themeMode} onToggle={toggleTheme} />
-      {content}
-    </>
-  ), [themeMode, toggleTheme]);
+  const withTheme = useCallback(
+    (content) => (
+      <>
+        <ThemeToggle mode={themeMode} onToggle={toggleTheme} />
+        {content}
+      </>
+    ),
+    [themeMode, toggleTheme]
+  );
 
-  // Ao carregar, verifica se há ?event= na URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("event");
+
     if (id) {
       loadEvent(id);
     }
   }, []);
 
   useEffect(() => {
-    const stop = () => { dragging.current = false; };
+    const stop = () => {
+      dragging.current = false;
+    };
+
     window.addEventListener("mouseup", stop);
     window.addEventListener("touchend", stop);
+
     return () => {
       window.removeEventListener("mouseup", stop);
       window.removeEventListener("touchend", stop);
     };
   }, []);
 
-  // ── Carregar evento do Supabase
   const loadEvent = async (id) => {
     setLoading(true);
     setError(null);
+
     try {
       const ev = await fetchEventById(id.trim());
+
       if (ev) {
         setCurrentEvent(ev);
         window.history.pushState({}, "", `${window.location.pathname}?event=${id.trim()}`);
@@ -520,18 +580,21 @@ export default function App() {
       } else {
         setError("Evento não encontrado.");
       }
-    } catch (e) {
+    } catch {
       setError("Erro ao carregar evento. Tenta novamente.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Recarregar evento atual (após submeter resposta, etc.)
   const reloadCurrentEvent = async () => {
     if (!currentEvent) return;
+
     const ev = await fetchEventById(currentEvent.id);
-    if (ev) setCurrentEvent(ev);
+
+    if (ev) {
+      setCurrentEvent(ev);
+    }
   };
 
   const eventDates = useMemo(() => {
@@ -553,16 +616,19 @@ export default function App() {
     ? `${window.location.origin}${window.location.pathname}?event=${currentEvent.id}`
     : "";
 
-  // ── Criar evento
   const createEvent = async () => {
     if (createSubmitting.current) return;
+
     blurActiveElement();
+
     if (!eventTitle.trim() || !creatorName.trim() || selectedDateKeys.length === 0) return;
+
     createSubmitting.current = true;
     setLoading(true);
     setError(null);
 
     const id = uid();
+
     const newEvent = {
       id,
       title: eventTitle.trim(),
@@ -576,79 +642,111 @@ export default function App() {
 
     try {
       await insertEvent(newEvent);
+
       setCurrentEvent(newEvent);
       setParticipantName(creatorName.trim());
       setAvailability({});
       window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
       setCreateStep("title");
       setScreen("created");
-    } catch (e) {
+    } catch {
       setError("Erro ao criar evento. Verifica a ligação e tenta novamente.");
     } finally {
       setLoading(false);
-      setTimeout(() => { createSubmitting.current = false; }, 300);
+
+      setTimeout(() => {
+        createSubmitting.current = false;
+      }, 300);
     }
   };
 
-  // ── Entrar num evento pelo código
   const openEvent = (id) => {
     const clean = id.trim();
+
     if (!clean) return;
+
     loadEvent(clean);
   };
 
   const startResponse = () => {
     const name = participantName.trim();
+
     if (!name || !currentEvent) return;
+
     const existing = currentEvent.responses?.find(
       (r) => normalizeName(r.name) === normalizeName(name)
     );
+
     setAvailability(existing?.availability || {});
     setScreen("fill");
   };
 
   const startCreatorResponse = () => {
     const name = currentEvent?.creatorName?.trim();
+
     if (!name || !currentEvent) return;
+
     const existing = currentEvent.responses?.find(
       (r) => normalizeName(r.name) === normalizeName(name)
     );
+
     setParticipantName(name);
     setAvailability(existing?.availability || {});
     setScreen("fill");
   };
 
-  const onCellDown = useCallback((dateKey, slotId) => {
-    const k = slotKey(dateKey, slotId);
-    const newVal = !availability[k];
-    dragVal.current = newVal;
-    dragging.current = true;
-    setAvailability((p) => ({ ...p, [k]: newVal }));
-  }, [availability]);
+  const onCellDown = useCallback(
+    (dateKey, slotId) => {
+      const k = slotKey(dateKey, slotId);
+      const newVal = !availability[k];
+
+      dragVal.current = newVal;
+      dragging.current = true;
+
+      setAvailability((p) => ({
+        ...p,
+        [k]: newVal,
+      }));
+    },
+    [availability]
+  );
 
   const onCellEnter = useCallback((dateKey, slotId) => {
     if (!dragging.current) return;
-    setAvailability((p) => ({ ...p, [slotKey(dateKey, slotId)]: dragVal.current }));
+
+    setAvailability((p) => ({
+      ...p,
+      [slotKey(dateKey, slotId)]: dragVal.current,
+    }));
   }, []);
 
   const onTouchMove = useCallback((e) => {
     if (!dragging.current) return;
+
     e.preventDefault();
+
     const touch = e.touches[0];
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
+
     if (el?.dataset?.date && el?.dataset?.slot) {
-      setAvailability((p) => ({ ...p, [slotKey(el.dataset.date, el.dataset.slot)]: dragVal.current }));
+      setAvailability((p) => ({
+        ...p,
+        [slotKey(el.dataset.date, el.dataset.slot)]: dragVal.current,
+      }));
     }
   }, []);
 
-  // ── Submeter disponibilidade
   const submitResponse = async () => {
     if (responseSubmitting.current) return;
+
     blurActiveElement();
+
     dragging.current = false;
 
     const name = participantName.trim();
+
     if (!currentEvent || !name) return;
+
     responseSubmitting.current = true;
     setLoading(true);
     setError(null);
@@ -657,21 +755,28 @@ export default function App() {
       await upsertResponse(currentEvent.id, name, availability);
       await reloadCurrentEvent();
       setScreen("results");
-    } catch (e) {
+    } catch {
       setError("Erro ao guardar disponibilidade. Tenta novamente.");
     } finally {
       setLoading(false);
-      setTimeout(() => { responseSubmitting.current = false; }, 300);
+
+      setTimeout(() => {
+        responseSubmitting.current = false;
+      }, 300);
     }
   };
 
   const getCount = (dateKey, slotId) => {
     if (!currentEvent) return 0;
-    return (currentEvent.responses || []).filter((r) => r.availability?.[slotKey(dateKey, slotId)]).length;
+
+    return (currentEvent.responses || []).filter(
+      (r) => r.availability?.[slotKey(dateKey, slotId)]
+    ).length;
   };
 
   const getNames = (dateKey, slotId) => {
     if (!currentEvent) return [];
+
     return (currentEvent.responses || [])
       .filter((r) => r.availability?.[slotKey(dateKey, slotId)])
       .map((r) => r.name);
@@ -679,29 +784,48 @@ export default function App() {
 
   const currentParticipantResponse = useMemo(() => {
     const name = normalizeName(participantName);
+
     if (!currentEvent || !name) return null;
-    return (currentEvent.responses || []).find((r) => normalizeName(r.name) === name) || null;
+
+    return (
+      (currentEvent.responses || []).find((r) => normalizeName(r.name) === name) || null
+    );
   }, [currentEvent, participantName]);
 
   const editCurrentAvailability = () => {
     if (!currentParticipantResponse) return;
+
     setAvailability(currentParticipantResponse.availability || {});
     setScreen("fill");
   };
 
   const bestOptions = useMemo(() => {
     if (!currentEvent) return [];
+
     const rows = [];
+
     for (const d of eventDates) {
       for (const s of slots) {
         const count = getCount(d, s.id);
+
         if (count > 0) {
-          rows.push({ dateKey: d, slot: s, count, names: getNames(d, s.id) });
+          rows.push({
+            dateKey: d,
+            slot: s,
+            count,
+            names: getNames(d, s.id),
+          });
         }
       }
     }
+
     return rows
-      .sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id))
+      .sort(
+        (a, b) =>
+          b.count - a.count ||
+          a.dateKey.localeCompare(b.dateKey) ||
+          Number(a.slot.id) - Number(b.slot.id)
+      )
       .slice(0, 4);
   }, [currentEvent, eventDates, slots]);
 
@@ -711,8 +835,13 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(eventLink);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch { setCopied(false); }
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 1400);
+    } catch {
+      setCopied(false);
+    }
   };
 
   const copyEventCode = async () => {
@@ -721,12 +850,15 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(currentEvent.id);
       setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 1400);
+
+      setTimeout(() => {
+        setCopiedCode(false);
+      }, 1400);
     } catch {
       setCopiedCode(false);
     }
-  }; 
-  
+  };
+
   const resetToHome = () => {
     setScreen("home");
     setCurrentEvent(null);
@@ -738,10 +870,16 @@ export default function App() {
     window.history.pushState({}, "", window.location.pathname);
   };
 
-  // ── Loading overlay
   if (loading) {
     return withTheme(
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div
+        style={{
+          ...BASE,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <div style={{ textAlign: "center", color: MUTED2 }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>⚽</div>
           <p style={{ margin: 0, fontSize: 14 }}>A carregar...</p>
@@ -753,44 +891,123 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────── HOME
   if (screen === "home") {
     return withTheme(
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div
+        style={{
+          ...BASE,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
         <div style={{ width: "100%", maxWidth: 440 }}>
           <div style={{ textAlign: "center", marginBottom: 34 }}>
-            <div style={{ width: 68, height: 68, background: ACCENT_SOFT, borderRadius: 24, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}`, boxShadow: SOFT_SHADOW }}>⚽</div>
-            <h1 style={{ margin: "10px 0 0", fontSize: 32, color: "#166534", letterSpacing: "-1px" }}>Organiza Eventos</h1>
-            <p style={{ margin: "20px 20px 0", color: MUTED2, fontSize: 13 }}>Marca a melhor hora para toda a gente.</p>
+            <div
+              style={{
+                width: 68,
+                height: 68,
+                background: ACCENT_SOFT,
+                borderRadius: 24,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 32,
+                margin: "0 auto 16px",
+                border: `1px solid ${BORDER}`,
+                boxShadow: SOFT_SHADOW,
+              }}
+            >
+              ⚽
+            </div>
+
+            <h1
+              style={{
+                margin: "10px 0 0",
+                fontSize: 32,
+                color: "#166534",
+                letterSpacing: "-1px",
+              }}
+            >
+              Organiza Eventos
+            </h1>
+
+            <p style={{ margin: "20px 20px 0", color: MUTED2, fontSize: 13 }}>
+              Marca a melhor hora para toda a gente.
+            </p>
           </div>
 
           {error && (
-            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
+            <div
+              style={{
+                background: "rgba(255,107,107,0.08)",
+                border: `1px solid ${DANGER}`,
+                color: DANGER,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 13,
+                marginBottom: 14,
+              }}
+            >
               {error}
             </div>
           )}
 
           <div style={{ display: "grid", gap: 12 }}>
             <button
-              onClick={() => { setCreateStep("title"); setScreen("create"); }}
-              style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%", boxShadow: "0 14px 32px rgba(34,197,94,0.22)" }}
+              onClick={() => {
+                setCreateStep("title");
+                setScreen("create");
+              }}
+              style={{
+                ...buttonBase,
+                background: ACCENT,
+                color: "#fff",
+                width: "100%",
+                boxShadow: "0 14px 32px rgba(34,197,94,0.22)",
+              }}
             >
               Criar Evento
             </button>
 
-            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: 16 }}>
-              <p style={{ margin: "0 0 10px", fontSize: 12, color: MUTED2, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.7px" }}>
-                entrar num evento
+            <div
+              style={{
+                background: SURFACE2,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 22,
+                padding: 16,
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 10px",
+                  fontSize: 12,
+                  color: MUTED2,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.7px",
+                }}
+              >
+                Entrar num evento
               </p>
+
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   value={eventCode}
                   onChange={(e) => setEventCode(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && openEvent(eventCode)}
-                  placeholder="código do evento"
+                  placeholder="Código do evento"
                   style={inputStyle}
                 />
+
                 <button
                   onClick={() => openEvent(eventCode)}
                   disabled={!eventCode.trim()}
-                  style={{ ...buttonBase, background: eventCode.trim() ? ACCENT : SURFACE, color: eventCode.trim() ? "#fff" : MUTED2, whiteSpace: "nowrap" }}
+                  style={{
+                    ...buttonBase,
+                    background: eventCode.trim() ? ACCENT : SURFACE,
+                    color: eventCode.trim() ? "#fff" : MUTED2,
+                    whiteSpace: "nowrap",
+                  }}
                 >
                   Entrar
                 </button>
@@ -810,13 +1027,61 @@ export default function App() {
 
     if (createStep === "title") {
       return withTheme(
-        <div style={{ ...BASE, minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 18px" }}>
+        <div
+          style={{
+            ...BASE,
+            minHeight: "100dvh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px 18px",
+          }}
+        >
           <div style={{ width: "100%", maxWidth: 430 }}>
-            <button onClick={resetToHome} style={{ ...miniButton, marginBottom: 18 }}>←</button>
+            <button onClick={resetToHome} style={{ ...miniButton, marginBottom: 18 }}>
+              ←
+            </button>
+
             <div style={modalCardStyle}>
-              <div style={{ width: 56, height: 56, borderRadius: 22, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 27, marginBottom: 18 }}>⚡</div>
-              <p style={{ margin: "0 0 8px", color: ACCENT_DARK, fontSize: 26, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>novo evento</p>
-              <p style={{ margin: "15px 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>Dá um nome ao evento e identifica o criador.</p>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 22,
+                  background: ACCENT_SOFT,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 27,
+                  marginBottom: 18,
+                }}
+              >
+                ⚡
+              </div>
+
+              <p
+                style={{
+                  margin: "0 0 8px",
+                  color: ACCENT_DARK,
+                  fontSize: 26,
+                  fontWeight: 900,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.8px",
+                }}
+              >
+                Novo Evento
+              </p>
+
+              <p
+                style={{
+                  margin: "15px 0 20px",
+                  color: MUTED2,
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                }}
+              >
+                Dá um nome ao evento e identifica o criador.
+              </p>
 
               <label style={{ ...labelStyle, display: "block", marginBottom: 12 }}>
                 Nome do evento
@@ -824,8 +1089,13 @@ export default function App() {
                   autoFocus
                   value={eventTitle}
                   onChange={(e) => setEventTitle(e.target.value)}
-                  placeholder="ex: Futsal sexta à noite"
-                  style={{ ...inputStyle, fontSize: 17, padding: "16px 17px", marginTop: 7 }}
+                  placeholder="Ex: Futsal sexta à noite"
+                  style={{
+                    ...inputStyle,
+                    fontSize: 17,
+                    padding: "16px 17px",
+                    marginTop: 7,
+                  }}
                 />
               </label>
 
@@ -834,16 +1104,32 @@ export default function App() {
                 <input
                   value={creatorName}
                   onChange={(e) => setCreatorName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && canContinueTitle && setCreateStep("details")}
-                  placeholder="ex: Pedro Salgado"
-                  style={{ ...inputStyle, fontSize: 17, padding: "16px 17px", marginTop: 7 }}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && canContinueTitle && setCreateStep("details")
+                  }
+                  placeholder="Ex: Pedro Salgado"
+                  style={{
+                    ...inputStyle,
+                    fontSize: 17,
+                    padding: "16px 17px",
+                    marginTop: 7,
+                  }}
                 />
               </label>
 
               <button
                 onClick={() => setCreateStep("details")}
                 disabled={!canContinueTitle}
-                style={{ ...buttonBase, width: "100%", marginTop: 14, background: canContinueTitle ? ACCENT : DISABLED_BG, color: canContinueTitle ? "#fff" : MUTED2, boxShadow: canContinueTitle ? "0 14px 32px rgba(34,197,94,0.22)" : "none" }}
+                style={{
+                  ...buttonBase,
+                  width: "100%",
+                  marginTop: 14,
+                  background: canContinueTitle ? ACCENT : DISABLED_BG,
+                  color: canContinueTitle ? "#fff" : MUTED2,
+                  boxShadow: canContinueTitle
+                    ? "0 14px 32px rgba(34,197,94,0.22)"
+                    : "none",
+                }}
               >
                 Continuar
               </button>
@@ -856,10 +1142,24 @@ export default function App() {
     return withTheme(
       <div style={{ ...BASE, padding: isPhone ? "16px 12px 28px" : "22px 16px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
-          <Header title="Criar Evento" subtitle="escolhe os dias e o intervalo de horas" onBack={() => setCreateStep("title")} />
+          <Header
+            title="Criar Evento"
+            subtitle="Escolhe os dias e o intervalo de horas"
+            onBack={() => setCreateStep("title")}
+          />
 
           {error && (
-            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
+            <div
+              style={{
+                background: "rgba(255,107,107,0.08)",
+                border: `1px solid ${DANGER}`,
+                color: DANGER,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 13,
+                marginBottom: 14,
+              }}
+            >
               {error}
             </div>
           )}
@@ -867,17 +1167,70 @@ export default function App() {
           <div style={{ display: "grid", gap: 14 }}>
             <div style={eventNameCardStyle}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ margin: "0 0 5px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>evento</p>
-                <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{eventTitle}</h2>
-                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Criado por {creatorName}</p>
+                <p
+                  style={{
+                    margin: "0 0 5px",
+                    color: MUTED2,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                  }}
+                >
+                  Evento
+                </p>
+
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 20,
+                    lineHeight: 1.2,
+                    letterSpacing: "-0.5px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {eventTitle}
+                </h2>
+
+                <p
+                  style={{
+                    margin: "5px 0 0",
+                    color: MUTED2,
+                    fontSize: 12,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Criado por {creatorName}
+                </p>
               </div>
-              <button onClick={() => setCreateStep("title")} style={{ ...miniButton, width: "auto", paddingInline: 12, fontSize: 12, fontWeight: 800 }}>Editar</button>
+
+              <button
+                onClick={() => setCreateStep("title")}
+                style={{
+                  ...miniButton,
+                  width: "auto",
+                  paddingInline: 12,
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}
+              >
+                Editar
+              </button>
             </div>
 
             <IntegratedCalendarPicker
               startDate={calendarStart}
               selectedDates={selectedDates}
-              onToggleDate={(key) => setSelectedDates((p) => ({ ...p, [key]: !p[key] }))}
+              onToggleDate={(key) =>
+                setSelectedDates((p) => ({
+                  ...p,
+                  [key]: !p[key],
+                }))
+              }
               onPrevious={() => setCalendarStart((d) => addWeeks(d, -4))}
               onNext={() => setCalendarStart((d) => addWeeks(d, 4))}
             />
@@ -885,7 +1238,18 @@ export default function App() {
             {selectedDateKeys.length > 0 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: -2 }}>
                 {selectedDateKeys.map((d) => (
-                  <span key={d} style={{ background: ACCENT_SOFT, border: `1px solid ${BORDER}`, color: ACCENT_DARK, borderRadius: 999, padding: "7px 11px", fontSize: 12, fontWeight: 800 }}>
+                  <span
+                    key={d}
+                    style={{
+                      background: ACCENT_SOFT,
+                      border: `1px solid ${BORDER}`,
+                      color: ACCENT_DARK,
+                      borderRadius: 999,
+                      padding: "7px 11px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                    }}
+                  >
                     {formatDateLong(d)}
                   </span>
                 ))}
@@ -894,29 +1258,98 @@ export default function App() {
 
             <div style={rangeCardStyle}>
               <div style={{ marginBottom: 12 }}>
-                <p style={{ margin: 0, color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>range de horas</p>
-                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12 }}>Slots de 30 em 30 minutos</p>
+                <p
+                  style={{
+                    margin: 0,
+                    color: MUTED2,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                  }}
+                >
+                  Range de horas
+                </p>
+
+                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12 }}>
+                  Slots de 30 em 30 minutos
+                </p>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8, width: "100%" }}>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                  gap: 8,
+                  width: "100%",
+                }}
+              >
                 <label style={{ ...labelStyle, minWidth: 0 }}>
                   Das
-                  <input type="time" step="1800" value={startTime} onChange={(e) => setStartTime(e.target.value)} style={{ ...inputStyle, marginTop: 6, padding: isPhone ? "12px 8px" : "14px 16px", minWidth: 0, width: "100%", WebkitAppearance: "none", appearance: "none" }} />
+                  <input
+                    type="time"
+                    step="1800"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    style={{
+                      ...inputStyle,
+                      marginTop: 6,
+                      padding: isPhone ? "12px 8px" : "14px 16px",
+                      minWidth: 0,
+                      width: "100%",
+                      WebkitAppearance: "none",
+                      appearance: "none",
+                    }}
+                  />
                 </label>
+
                 <label style={{ ...labelStyle, minWidth: 0 }}>
                   Até
-                  <input type="time" step="1800" value={endTime} onChange={(e) => setEndTime(e.target.value)} style={{ ...inputStyle, marginTop: 6, padding: isPhone ? "12px 8px" : "14px 16px", minWidth: 0, width: "100%", WebkitAppearance: "none", appearance: "none" }} />
+                  <input
+                    type="time"
+                    step="1800"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    style={{
+                      ...inputStyle,
+                      marginTop: 6,
+                      padding: isPhone ? "12px 8px" : "14px 16px",
+                      minWidth: 0,
+                      width: "100%",
+                      WebkitAppearance: "none",
+                      appearance: "none",
+                    }}
+                  />
                 </label>
               </div>
-              <p style={{ margin: "10px 0 0", color: crossesMidnight ? ACCENT_DARK : MUTED2, fontSize: 12, lineHeight: 1.45 }}>
-                {crossesMidnight ? "Este range passa da meia-noite. Ex.: 21:30 → 04:00." : "Os participantes só poderão escolher slots dentro deste intervalo."}
+
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  color: crossesMidnight ? ACCENT_DARK : MUTED2,
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                }}
+              >
+                {crossesMidnight
+                  ? "Este range passa da meia-noite. Ex.: 21:30 → 04:00."
+                  : "Os participantes só poderão escolher slots dentro deste intervalo."}
               </p>
             </div>
 
             <button
-              onPointerUp={(e) => { e.preventDefault(); createEvent(); }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                createEvent();
+              }}
               onClick={createEvent}
               disabled={!canCreate}
-              style={{ ...buttonBase, background: canCreate ? ACCENT : DISABLED_BG, color: canCreate ? "#fff" : MUTED2, boxShadow: canCreate ? "0 14px 32px rgba(34,197,94,0.22)" : "none" }}
+              style={{
+                ...buttonBase,
+                background: canCreate ? ACCENT : DISABLED_BG,
+                color: canCreate ? "#fff" : MUTED2,
+                boxShadow: canCreate ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
+              }}
             >
               Criar Evento
             </button>
@@ -929,36 +1362,39 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────── CREATED
   if (screen === "created" && currentEvent) {
     return withTheme(
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ width: "100%", maxWidth: 520, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 28, padding: 22 }}>
-          <p style={{ margin: 0, color: ACCENT, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>evento criado</p>
-          <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
-          <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>Partilha este link com quem queres convidar.</p>
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, fontSize: 12, color: MUTED2, wordBreak: "break-all" }}>
-            {eventLink}
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button onClick={startCreatorResponse} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>Preencher Disponibilidade</button>
-            <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "Copiado" : "Copiar Link"}</button>
-            <button onClick={() => setScreen("event")} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>Abrir Evento</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────── EVENT LANDING
-  if (screen === "created" && currentEvent) {
-    return withTheme(
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ width: "100%", maxWidth: 520, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 28, padding: 22 }}>
-          <p style={{ margin: 0, color: ACCENT, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+      <div
+        style={{
+          ...BASE,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 520,
+            background: SURFACE2,
+            border: `1px solid ${BORDER}`,
+            borderRadius: 28,
+            padding: 22,
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              color: ACCENT,
+              fontSize: 12,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.7px",
+            }}
+          >
             Evento Criado
           </p>
 
-          <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>
-            {currentEvent.title}
-          </h1>
+          <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
 
           <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>
             Partilha o link ou o código com quem queres convidar.
@@ -966,43 +1402,222 @@ export default function App() {
 
           <div style={{ display: "grid", gap: 10 }}>
             <div>
-              <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+              <p
+                style={{
+                  margin: "0 0 6px",
+                  color: MUTED2,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.7px",
+                }}
+              >
                 Link do Evento
               </p>
 
-              <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, fontSize: 12, color: MUTED2, wordBreak: "break-all" }}>
+              <div
+                style={{
+                  background: SURFACE,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 18,
+                  padding: 14,
+                  fontSize: 12,
+                  color: MUTED2,
+                  wordBreak: "break-all",
+                }}
+              >
                 {eventLink}
               </div>
             </div>
 
             <div>
-              <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+              <p
+                style={{
+                  margin: "0 0 6px",
+                  color: MUTED2,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.7px",
+                }}
+              >
                 Código do Evento
               </p>
 
-              <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, fontSize: 16, color: TEXT, fontWeight: 900, letterSpacing: "0.5px", wordBreak: "break-all" }}>
+              <div
+                style={{
+                  background: SURFACE,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 18,
+                  padding: 14,
+                  fontSize: 16,
+                  color: TEXT,
+                  fontWeight: 900,
+                  letterSpacing: "0.5px",
+                  wordBreak: "break-all",
+                }}
+              >
                 {currentEvent.id}
               </div>
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button onClick={startCreatorResponse} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>
+            <button
+              onClick={startCreatorResponse}
+              style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
+            >
+              Preencher Disponibilidade
+            </button>
+
+            <button
+              onClick={copyLink}
+              style={{
+                ...buttonBase,
+                background: SURFACE,
+                color: TEXT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              {copied ? "Link Copiado" : "Copiar Link"}
+            </button>
+
+            <button
+              onClick={copyEventCode}
+              style={{
+                ...buttonBase,
+                background: SURFACE,
+                color: TEXT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              {copiedCode ? "Código Copiado" : "Copiar Código"}
+            </button>
+
+            <button
+              onClick={() => setScreen("event")}
+              style={{
+                ...buttonBase,
+                background: SURFACE,
+                color: TEXT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              Abrir Evento
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────── EVENT LANDING
+  if (screen === "event" && currentEvent) {
+    return withTheme(
+      <div
+        style={{
+          ...BASE,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 460 }}>
+          <Header
+            title={currentEvent.title}
+            subtitle={`${currentEvent.dates.length} dia${
+              currentEvent.dates.length !== 1 ? "s" : ""
+            } possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${
+              currentEvent.startTime
+            } às ${currentEvent.endTime}`}
+            onBack={resetToHome}
+          />
+
+          {(currentEvent.responses?.length || 0) === 0 && currentEvent.creatorName ? (
+            <div
+              style={{
+                background: SURFACE2,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 24,
+                padding: 18,
+              }}
+            >
+              <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 12 }}>
+                Primeira resposta
+              </p>
+
+              <h3 style={{ margin: "0 0 12px", fontSize: 18 }}>
+                Criador: {currentEvent.creatorName}
+              </h3>
+
+              <button
+                onClick={startCreatorResponse}
+                style={{
+                  ...buttonBase,
+                  background: ACCENT,
+                  color: "#fff",
+                  width: "100%",
+                }}
+              >
                 Preencher Disponibilidade
               </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                background: SURFACE2,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 24,
+                padding: 18,
+              }}
+            >
+              <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>
+                Para responder ou editar, escreve o teu nome.
+              </p>
 
-              <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>
-                {copied ? "Link Copiado" : "Copiar Link"}
-              </button>
+              <input
+                autoFocus
+                value={participantName}
+                onChange={(e) => setParticipantName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && startResponse()}
+                placeholder="O teu nome"
+                style={inputStyle}
+              />
 
-              <button onClick={copyEventCode} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>
-                {copiedCode ? "Código Copiado" : "Copiar Código"}
+              <button
+                onClick={startResponse}
+                disabled={!participantName.trim()}
+                style={{
+                  ...buttonBase,
+                  background: participantName.trim() ? ACCENT : SURFACE,
+                  color: participantName.trim() ? "#fff" : MUTED2,
+                  width: "100%",
+                  marginTop: 10,
+                }}
+              >
+                {currentParticipantResponse
+                  ? "Editar Disponibilidade"
+                  : "Preencher Disponibilidade"}
               </button>
+            </div>
+          )}
 
-              <button onClick={() => setScreen("event")} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>
-                Abrir Evento
-              </button>
-          </div>
+          <button
+            onClick={() => setScreen("results")}
+            style={{
+              marginTop: 16,
+              background: "transparent",
+              color: MUTED2,
+              border: "none",
+              cursor: "pointer",
+              fontFamily: "'Sora', sans-serif",
+              width: "100%",
+            }}
+          >
+            Ver Resultados · {currentEvent.responses?.length || 0} resposta
+            {(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}
+          </button>
         </div>
       </div>
     );
@@ -1011,39 +1626,125 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────── FILL
   if (screen === "fill" && currentEvent) {
     const canSaveResponse = participantName.trim().length > 0;
-    const editingLabel = currentParticipantResponse ? "Guardar Alterações" : "Guardar Disponibilidade";
+    const editingLabel = currentParticipantResponse
+      ? "Guardar Alterações"
+      : "Guardar Disponibilidade";
 
     return withTheme(
-      <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: isPhone ? "16px 12px calc(92px + env(safe-area-inset-bottom))" : "20px 16px", userSelect: "none" }}>
+      <div
+        onMouseUp={() => {
+          dragging.current = false;
+        }}
+        onTouchMove={onTouchMove}
+        style={{
+          ...BASE,
+          padding: isPhone
+            ? "16px 12px calc(92px + env(safe-area-inset-bottom))"
+            : "20px 16px",
+          userSelect: "none",
+        }}
+      >
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header
             title={currentEvent.title}
-            subtitle={currentParticipantResponse ? "edita os slots em que podes" : "marca os slots em que podes"}
-            onBack={() => setScreen((currentEvent.responses?.length || 0) > 0 ? "results" : "event")}
+            subtitle={
+              currentParticipantResponse
+                ? "Edita os slots em que podes"
+                : "Marca os slots em que podes"
+            }
+            onBack={() =>
+              setScreen((currentEvent.responses?.length || 0) > 0 ? "results" : "event")
+            }
             right={`${selectedCount} slot${selectedCount !== 1 ? "s" : ""}`}
           />
 
           {error && (
-            <div style={{ background: "rgba(255,107,107,0.08)", border: `1px solid ${DANGER}`, color: DANGER, borderRadius: 18, padding: 14, fontSize: 13, marginBottom: 14 }}>
+            <div
+              style={{
+                background: "rgba(255,107,107,0.08)",
+                border: `1px solid ${DANGER}`,
+                color: DANGER,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 13,
+                marginBottom: 14,
+              }}
+            >
               {error}
             </div>
           )}
 
-          <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, marginBottom: 14 }}>
-            <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.7px" }}>Resposta de</p>
-            <strong style={{ display: "block", color: TEXT, fontSize: 16 }}>{participantName || currentEvent.creatorName}</strong>
-            <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.</p>
+          <div
+            style={{
+              background: SURFACE2,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 18,
+              padding: 14,
+              marginBottom: 14,
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 6px",
+                color: MUTED2,
+                fontSize: 11,
+                fontWeight: 900,
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
+              }}
+            >
+              Resposta de
+            </p>
+
+            <strong style={{ display: "block", color: TEXT, fontSize: 16 }}>
+              {participantName || currentEvent.creatorName}
+            </strong>
+
+            <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>
+              Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.
+            </p>
           </div>
 
-          <AvailabilityGrid eventDates={eventDates} slots={slots} availability={availability} onCellDown={onCellDown} onCellEnter={onCellEnter} />
+          <AvailabilityGrid
+            eventDates={eventDates}
+            slots={slots}
+            availability={availability}
+            onCellDown={onCellDown}
+            onCellEnter={onCellEnter}
+          />
 
-          <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", position: isPhone ? "fixed" : "static", left: isPhone ? 12 : "auto", right: isPhone ? 12 : "auto", bottom: isPhone ? "calc(12px + env(safe-area-inset-bottom))" : "auto", zIndex: 20 }}>
+          <div
+            style={{
+              marginTop: 24,
+              display: "flex",
+              justifyContent: "flex-end",
+              position: isPhone ? "fixed" : "static",
+              left: isPhone ? 12 : "auto",
+              right: isPhone ? 12 : "auto",
+              bottom: isPhone ? "calc(12px + env(safe-area-inset-bottom))" : "auto",
+              zIndex: 20,
+            }}
+          >
             <button
-              onPointerDown={(e) => { e.stopPropagation(); dragging.current = false; }}
-              onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); submitResponse(); }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                dragging.current = false;
+              }}
+              onPointerUp={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                submitResponse();
+              }}
               onClick={submitResponse}
               disabled={!canSaveResponse}
-              style={{ ...buttonBase, background: canSaveResponse ? ACCENT : SURFACE, color: canSaveResponse ? "#fff" : MUTED2, paddingInline: 34, width: isPhone ? "100%" : "auto", boxShadow: isPhone ? "0 14px 30px rgba(0,0,0,0.45)" : "none" }}
+              style={{
+                ...buttonBase,
+                background: canSaveResponse ? ACCENT : SURFACE,
+                color: canSaveResponse ? "#fff" : MUTED2,
+                paddingInline: 34,
+                width: isPhone ? "100%" : "auto",
+                boxShadow: isPhone ? "0 14px 30px rgba(0,0,0,0.45)" : "none",
+              }}
             >
               {editingLabel}
             </button>
@@ -1064,18 +1765,39 @@ export default function App() {
             title="Resultados"
             subtitle={currentEvent.title}
             onBack={() => setScreen("event")}
-            right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`}
+            right={`${currentEvent.responses?.length || 0} resposta${
+              (currentEvent.responses?.length || 0) !== 1 ? "s" : ""
+            }`}
           />
 
-          <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
+          <Heatmap
+            eventDates={eventDates}
+            slots={slots}
+            max={max}
+            getCount={getCount}
+            getNames={getNames}
+          />
+
           <BestOptionsList bestOptions={bestOptions} />
 
           {(currentEvent.responses?.length || 0) > 0 && (
             <div style={{ marginTop: 26 }}>
-              <p style={sectionTitle}>responderam</p>
+              <p style={sectionTitle}>Responderam</p>
+
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {currentEvent.responses.map((r) => (
-                  <span key={r.name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 999, padding: "7px 13px", fontSize: 13 }}>{r.name}</span>
+                  <span
+                    key={r.name}
+                    style={{
+                      background: SURFACE,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 999,
+                      padding: "7px 13px",
+                      fontSize: 13,
+                    }}
+                  >
+                    {r.name}
+                  </span>
                 ))}
               </div>
             </div>
@@ -1083,11 +1805,37 @@ export default function App() {
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 28 }}>
             {currentParticipantResponse && (
-              <button onClick={editCurrentAvailability} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>
+              <button
+                onClick={editCurrentAvailability}
+                style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
+              >
                 Editar a Minha Disponibilidade
               </button>
             )}
-            <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "Copiado" : "Copiar Link"}</button>
+
+            <button
+              onClick={copyLink}
+              style={{
+                ...buttonBase,
+                background: SURFACE,
+                color: TEXT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              {copied ? "Link Copiado" : "Copiar Link"}
+            </button>
+
+            <button
+              onClick={copyEventCode}
+              style={{
+                ...buttonBase,
+                background: SURFACE,
+                color: TEXT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              {copiedCode ? "Código Copiado" : "Copiar Código"}
+            </button>
           </div>
         </div>
       </div>
@@ -1097,10 +1845,11 @@ export default function App() {
   return null;
 }
 
-// ─── Componentes (inalterados) ────────────────────────────────────────────────
+// ─── Componentes ─────────────────────────────────────────────────────────────
 
 function ThemeToggle({ mode, onToggle }) {
   const theme = THEMES[mode] || THEMES.light;
+
   return (
     <button
       type="button"
@@ -1130,62 +1879,209 @@ function ThemeToggle({ mode, onToggle }) {
         touchAction: "manipulation",
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 16 }}>{theme.icon}</span>
+      <span aria-hidden="true" style={{ fontSize: 16 }}>
+        {theme.icon}
+      </span>
       <span>{mode === "dark" ? "Modo Claro" : "Dark Mode"}</span>
     </button>
   );
 }
 
-function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPrevious, onNext }) {
+function IntegratedCalendarPicker({
+  startDate,
+  selectedDates,
+  onToggleDate,
+  onPrevious,
+  onNext,
+}) {
   const isPhone = useIsPhone();
+
   const days = getRollingCalendarDays(startDate, 4);
-  const visibleLabel = `${MONTHS[startDate.getMonth()].slice(0, 3)} ${startDate.getFullYear()} → ${MONTHS[days[days.length - 1].getMonth()].slice(0, 3)} ${days[days.length - 1].getFullYear()}`;
-  const gridColumns = isPhone ? "repeat(7, minmax(38px, 1fr))" : "repeat(7, minmax(88px, 1fr))";
+
+  const visibleLabel = `${MONTHS[startDate.getMonth()].slice(0, 3)} ${startDate.getFullYear()} → ${MONTHS[
+    days[days.length - 1].getMonth()
+  ].slice(0, 3)} ${days[days.length - 1].getFullYear()}`;
+
+  const gridColumns = isPhone
+    ? "repeat(7, minmax(38px, 1fr))"
+    : "repeat(7, minmax(88px, 1fr))";
+
   const gridMinWidth = isPhone ? "100%" : 680;
   const dayHeight = isPhone ? 58 : 82;
   const activeSize = isPhone ? 38 : 48;
 
   return (
-    <div style={{ background: SURFACE, color: TEXT, borderRadius: isPhone ? 26 : 30, padding: isPhone ? "18px 14px 22px" : "26px 28px 34px", border: `1px solid ${BORDER}`, boxShadow: CARD_SHADOW, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: isPhone ? 18 : 28 }}>
+    <div
+      style={{
+        background: SURFACE,
+        color: TEXT,
+        borderRadius: isPhone ? 26 : 30,
+        padding: isPhone ? "18px 14px 22px" : "26px 28px 34px",
+        border: `1px solid ${BORDER}`,
+        boxShadow: CARD_SHADOW,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: isPhone ? 18 : 28,
+        }}
+      >
         <div style={{ minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontSize: isPhone ? 18 : 24, fontWeight: 600, letterSpacing: "-0.5px" }}>Que dias queres disponibilizar?</h3>
-          <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 12 }}>{visibleLabel}</p>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: isPhone ? 18 : 24,
+              fontWeight: 600,
+              letterSpacing: "-0.5px",
+            }}
+          >
+            Que dias queres disponibilizar?
+          </h3>
+
+          <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 12 }}>
+            {visibleLabel}
+          </p>
         </div>
+
         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-          <button onClick={onPrevious} style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>‹</button>
-          <button onClick={onNext} style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>›</button>
+          <button
+            onClick={onPrevious}
+            style={{
+              ...calendarArrowButton,
+              width: isPhone ? 34 : 42,
+              height: isPhone ? 34 : 42,
+              fontSize: isPhone ? 34 : 44,
+            }}
+          >
+            ‹
+          </button>
+
+          <button
+            onClick={onNext}
+            style={{
+              ...calendarArrowButton,
+              width: isPhone ? 34 : 42,
+              height: isPhone ? 34 : 42,
+              fontSize: isPhone ? 34 : 44,
+            }}
+          >
+            ›
+          </button>
         </div>
       </div>
 
       <div style={{ overflowX: isPhone ? "hidden" : "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 0, borderBottom: `1px solid ${BORDER}`, paddingBottom: isPhone ? 12 : 20, minWidth: gridMinWidth }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: gridColumns,
+            gap: 0,
+            borderBottom: `1px solid ${BORDER}`,
+            paddingBottom: isPhone ? 12 : 20,
+            minWidth: gridMinWidth,
+          }}
+        >
           {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((d) => (
-            <div key={d} style={{ fontSize: isPhone ? 10 : 13, fontWeight: 600, letterSpacing: "0.2px", color: MUTED2 }}>{d}</div>
+            <div
+              key={d}
+              style={{
+                fontSize: isPhone ? 10 : 13,
+                fontWeight: 600,
+                letterSpacing: "0.2px",
+                color: MUTED2,
+              }}
+            >
+              {d}
+            </div>
           ))}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gridAutoRows: dayHeight, minWidth: gridMinWidth, paddingTop: isPhone ? 12 : 18 }}>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: gridColumns,
+            gridAutoRows: dayHeight,
+            minWidth: gridMinWidth,
+            paddingTop: isPhone ? 12 : 18,
+          }}
+        >
           {days.map((date, index) => {
             const key = dateToKey(date);
             const active = !!selectedDates[key];
             const showMonth = index === 0 || date.getDate() === 1;
             const isToday = key === dateToKey(new Date());
+
             return (
               <button
                 key={key}
                 onClick={() => onToggleDate(key)}
-                style={{ position: "relative", background: "transparent", border: "none", color: TEXT, textAlign: "left", padding: 0, cursor: "pointer", fontFamily: "'Sora', sans-serif", minHeight: dayHeight, touchAction: "manipulation" }}
+                style={{
+                  position: "relative",
+                  background: "transparent",
+                  border: "none",
+                  color: TEXT,
+                  textAlign: "left",
+                  padding: 0,
+                  cursor: "pointer",
+                  fontFamily: "'Sora', sans-serif",
+                  minHeight: dayHeight,
+                  touchAction: "manipulation",
+                }}
               >
                 {showMonth && (
-                  <span style={{ position: "absolute", top: 0, left: 0, color: ACCENT, fontSize: isPhone ? 9 : 12, fontWeight: 600, textTransform: "uppercase" }}>
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      color: ACCENT,
+                      fontSize: isPhone ? 9 : 12,
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                    }}
+                  >
                     {MONTHS[date.getMonth()].slice(0, 3)}
                   </span>
                 )}
-                <span style={{ position: "absolute", top: showMonth ? (isPhone ? 22 : 30) : (isPhone ? 16 : 24), left: 0, width: active ? activeSize : "auto", height: active ? activeSize : "auto", borderRadius: active ? "50%" : 0, background: active ? "#22c55e" : "transparent", color: active ? "#fff" : TEXT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isPhone ? 13 : 14, fontWeight: active ? 700 : 500, boxShadow: active ? "0 8px 18px rgba(34,197,94,0.22)" : "none" }}>
+
+                <span
+                  style={{
+                    position: "absolute",
+                    top: showMonth ? (isPhone ? 22 : 30) : isPhone ? 16 : 24,
+                    left: 0,
+                    width: active ? activeSize : "auto",
+                    height: active ? activeSize : "auto",
+                    borderRadius: active ? "50%" : 0,
+                    background: active ? "#22c55e" : "transparent",
+                    color: active ? "#fff" : TEXT,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: isPhone ? 13 : 14,
+                    fontWeight: active ? 700 : 500,
+                    boxShadow: active ? "0 8px 18px rgba(34,197,94,0.22)" : "none",
+                  }}
+                >
                   {date.getDate()}
                 </span>
+
                 {!active && isToday && (
-                  <span style={{ position: "absolute", top: showMonth ? (isPhone ? 46 : 54) : (isPhone ? 40 : 48), left: 2, width: 5, height: 5, borderRadius: "50%", background: ACCENT }} />
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: showMonth ? (isPhone ? 46 : 54) : isPhone ? 40 : 48,
+                      left: 2,
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      background: ACCENT,
+                    }}
+                  />
                 )}
               </button>
             );
@@ -1198,47 +2094,134 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
 
 function Header({ title, subtitle, onBack, right }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        marginBottom: 20,
+      }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <button onClick={onBack} style={{ ...miniButton, width: 36, height: 36, flexShrink: 0 }}>←</button>
+        <button onClick={onBack} style={{ ...miniButton, width: 36, height: 36, flexShrink: 0 }}>
+          ←
+        </button>
+
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h2>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 18,
+              fontWeight: 700,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {title}
+          </h2>
+
           <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED2 }}>{subtitle}</p>
         </div>
       </div>
-      {right && <div style={{ color: ACCENT_DARK, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{right}</div>}
+
+      {right && (
+        <div style={{ color: ACCENT_DARK, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>
+          {right}
+        </div>
+      )}
     </div>
   );
 }
 
 function BestOptionsList({ bestOptions }) {
   const isPhone = useIsPhone();
+
   if (!bestOptions.length) {
     return (
-      <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 14, color: MUTED2, fontSize: 13, marginBottom: isPhone ? 12 : 16 }}>
+      <div
+        style={{
+          background: SURFACE,
+          border: `1px solid ${BORDER}`,
+          borderRadius: 20,
+          padding: 14,
+          color: MUTED2,
+          fontSize: 13,
+          marginBottom: isPhone ? 12 : 16,
+        }}
+      >
         Ainda não há opções suficientes. Assim que alguém responder, as melhores horas aparecem aqui.
       </div>
     );
   }
+
   return (
     <div style={{ marginTop: isPhone ? 16 : 20, marginBottom: isPhone ? 12 : 16 }}>
-      <p style={sectionTitle}>melhores opções</p>
+      <p style={sectionTitle}>Melhores opções</p>
+
       <div style={{ display: "grid", gap: 8 }}>
-        {bestOptions.map((o, index) => (
-          <div key={`${o.dateKey}-${o.slot.id}`} style={{ background: SURFACE, border: `1px solid ${index === 0 ? ACCENT : BORDER}`, borderRadius: 18, padding: isPhone ? 12 : 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none" }}>
-            <div style={{ minWidth: 0 }}>
-              <strong style={{ display: "block", fontSize: isPhone ? 13 : 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {index + 1}. {formatSlotInterval(o.dateKey, o.slot.id).date} · {formatSlotInterval(o.dateKey, o.slot.id).range}
-              </strong>
-              <div style={{ color: MUTED2, fontSize: 12, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {o.names.join(", ")}
+        {bestOptions.map((o, index) => {
+          const interval = formatSlotInterval(o.dateKey, o.slot.id);
+
+          return (
+            <div
+              key={`${o.dateKey}-${o.slot.id}`}
+              style={{
+                background: SURFACE,
+                border: `1px solid ${index === 0 ? ACCENT : BORDER}`,
+                borderRadius: 18,
+                padding: isPhone ? 12 : 14,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <strong
+                  style={{
+                    display: "block",
+                    fontSize: isPhone ? 13 : 14,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {index + 1}. {interval.date} · {interval.range}
+                </strong>
+
+                <div
+                  style={{
+                    color: MUTED2,
+                    fontSize: 12,
+                    marginTop: 4,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {o.names.join(", ")}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  color: ACCENT_DARK,
+                  fontWeight: 900,
+                  background: ACCENT_SOFT,
+                  borderRadius: 999,
+                  padding: "7px 10px",
+                  fontSize: 13,
+                  flexShrink: 0,
+                }}
+              >
+                {o.count}
               </div>
             </div>
-            <div style={{ color: ACCENT_DARK, fontWeight: 900, background: ACCENT_SOFT, borderRadius: 999, padding: "7px 10px", fontSize: 13, flexShrink: 0 }}>
-              {o.count}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1247,33 +2230,86 @@ function BestOptionsList({ bestOptions }) {
 function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
   const isPhone = useIsPhone();
   const viewport = useViewportSize();
+
   const visibleColumns = Math.min(eventDates.length || 1, 5);
   const timeWidth = isPhone ? 42 : 58;
-  const columnWidth = isPhone ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56) : 62;
+  const columnWidth = isPhone
+    ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56)
+    : 62;
+
   const fillAvailableHeight = Math.max(360, viewport.height - 350);
-  const cellHeight = isPhone ? clamp(Math.floor(fillAvailableHeight / Math.max(slots.length, 1)), 20, 28) : 24;
+  const cellHeight = isPhone
+    ? clamp(Math.floor(fillAvailableHeight / Math.max(slots.length, 1)), 20, 28)
+    : 24;
+
   const headerHeight = isPhone ? 38 : 42;
 
   return (
-    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 18, border: `1px solid ${BORDER}`, background: SURFACE2 }}>
-      <div style={{ display: "flex", justifyContent: "center", minWidth: "100%", padding: isPhone ? "8px 8px 10px" : "10px 10px 12px" }}>
+    <div
+      style={{
+        overflowX: "auto",
+        WebkitOverflowScrolling: "touch",
+        borderRadius: 18,
+        border: `1px solid ${BORDER}`,
+        background: SURFACE2,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          minWidth: "100%",
+          padding: isPhone ? "8px 8px 10px" : "10px 10px 12px",
+        }}
+      >
         <div style={{ display: "flex", width: "max-content" }}>
           <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
             {slots.map((s) => (
-              <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: isPhone ? 9 : 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 6, boxSizing: "border-box" }}>
-                {s.label}{s.dayOffset ? "+1" : ""}
+              <div
+                key={s.id}
+                style={{
+                  height: cellHeight,
+                  width: timeWidth,
+                  display: "flex",
+                  alignItems: "center",
+                  fontSize: isPhone ? 9 : 10,
+                  color: s.isHour ? MUTED2 : "transparent",
+                  fontWeight: 600,
+                  paddingRight: 6,
+                  boxSizing: "border-box",
+                }}
+              >
+                {s.label}
+                {s.dayOffset ? "+1" : ""}
               </div>
             ))}
           </div>
+
           {eventDates.map((dateKey, di) => (
             <div key={dateKey} style={{ flexShrink: 0 }}>
-              <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
-                <strong style={{ fontSize: isPhone ? 11 : 12 }}>{formatDateShort(dateKey)}</strong>
-                <span style={{ color: MUTED2, fontSize: isPhone ? 9 : 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+              <div
+                style={{
+                  height: headerHeight,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: columnWidth,
+                }}
+              >
+                <strong style={{ fontSize: isPhone ? 11 : 12 }}>
+                  {formatDateShort(dateKey)}
+                </strong>
+
+                <span style={{ color: MUTED2, fontSize: isPhone ? 9 : 10 }}>
+                  {WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}
+                </span>
               </div>
+
               {slots.map((s) => {
                 const k = slotKey(dateKey, s.id);
                 const sel = !!availability[k];
+
                 return (
                   <div
                     key={s.id}
@@ -1282,7 +2318,17 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
                     onMouseDown={() => onCellDown(dateKey, s.id)}
                     onMouseEnter={() => onCellEnter(dateKey, s.id)}
                     onTouchStart={() => onCellDown(dateKey, s.id)}
-                    style={{ width: columnWidth, height: cellHeight, background: sel ? ACCENT : s.isHour ? SLOT_HOUR_BG : SLOT_BG, borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent", borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none", cursor: "pointer", boxSizing: "border-box", transition: "background 0.04s", touchAction: "none" }}
+                    style={{
+                      width: columnWidth,
+                      height: cellHeight,
+                      background: sel ? ACCENT : s.isHour ? SLOT_HOUR_BG : SLOT_BG,
+                      borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
+                      borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                      transition: "background 0.04s",
+                      touchAction: "none",
+                    }}
                   />
                 );
               })}
@@ -1297,13 +2343,21 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
 function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   const isPhone = useIsPhone();
   const viewport = useViewportSize();
+
   const [selectedSlot, setSelectedSlot] = useState(null);
   const peoplePanelRef = useRef(null);
+
   const visibleColumns = Math.min(eventDates.length || 1, 5);
   const timeWidth = isPhone ? 42 : 58;
-  const columnWidth = isPhone ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56) : 62;
+  const columnWidth = isPhone
+    ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56)
+    : 62;
+
   const heatmapAvailableHeight = Math.max(300, viewport.height - 360);
-  const cellHeight = isPhone ? clamp(Math.floor(heatmapAvailableHeight / Math.max(slots.length, 1)), 14, 24) : 24;
+  const cellHeight = isPhone
+    ? clamp(Math.floor(heatmapAvailableHeight / Math.max(slots.length, 1)), 14, 24)
+    : 24;
+
   const headerHeight = isPhone ? 36 : 42;
 
   const selectedCount = selectedSlot ? getCount(selectedSlot.dateKey, selectedSlot.slotId) : 0;
@@ -1311,46 +2365,157 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
 
   const toggleSlot = (dateKey, slot) => {
     const sameSlot = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === slot.id;
-    setSelectedSlot(sameSlot ? null : { dateKey, slotId: slot.id, label: slot.label, dayOffset: slot.dayOffset });
+
+    setSelectedSlot(
+      sameSlot
+        ? null
+        : {
+            dateKey,
+            slotId: slot.id,
+            label: slot.label,
+            dayOffset: slot.dayOffset,
+          }
+    );
+
     if (!sameSlot && isPhone) {
-      window.setTimeout(() => { peoplePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 80);
+      window.setTimeout(() => {
+        peoplePanelRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 80);
     }
   };
 
   return (
-    <div style={{ display: isPhone ? "block" : "grid", gridTemplateColumns: "minmax(0, 1fr) 290px", gap: 16, alignItems: "start", marginTop: isPhone ? 14 : 18 }}>
+    <div
+      style={{
+        display: isPhone ? "block" : "grid",
+        gridTemplateColumns: "minmax(0, 1fr) 290px",
+        gap: 16,
+        alignItems: "start",
+        marginTop: isPhone ? 14 : 18,
+      }}
+    >
       <div>
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 24, border: `1px solid ${BORDER}`, background: SURFACE2, boxShadow: SOFT_SHADOW }}>
-          <div style={{ display: "flex", justifyContent: "center", minWidth: "100%", padding: isPhone ? "8px 8px 10px" : "10px 10px 12px" }}>
+        <div
+          style={{
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            borderRadius: 24,
+            border: `1px solid ${BORDER}`,
+            background: SURFACE2,
+            boxShadow: SOFT_SHADOW,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              minWidth: "100%",
+              padding: isPhone ? "8px 8px 10px" : "10px 10px 12px",
+            }}
+          >
             <div style={{ display: "flex", width: "max-content" }}>
               <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
                 {slots.map((s) => (
-                  <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: isPhone ? 9 : 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 700, paddingRight: 6, boxSizing: "border-box" }}>
-                    {s.label}{s.dayOffset ? "+1" : ""}
+                  <div
+                    key={s.id}
+                    style={{
+                      height: cellHeight,
+                      width: timeWidth,
+                      display: "flex",
+                      alignItems: "center",
+                      fontSize: isPhone ? 9 : 10,
+                      color: s.isHour ? MUTED2 : "transparent",
+                      fontWeight: 700,
+                      paddingRight: 6,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {s.label}
+                    {s.dayOffset ? "+1" : ""}
                   </div>
                 ))}
               </div>
+
               {eventDates.map((dateKey, di) => (
                 <div key={dateKey} style={{ flexShrink: 0 }}>
-                  <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
-                    <strong style={{ fontSize: isPhone ? 11 : 12 }}>{formatDateShort(dateKey)}</strong>
-                    <span style={{ color: MUTED2, fontSize: isPhone ? 9 : 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+                  <div
+                    style={{
+                      height: headerHeight,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: columnWidth,
+                    }}
+                  >
+                    <strong style={{ fontSize: isPhone ? 11 : 12 }}>
+                      {formatDateShort(dateKey)}
+                    </strong>
+
+                    <span style={{ color: MUTED2, fontSize: isPhone ? 9 : 10 }}>
+                      {WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}
+                    </span>
                   </div>
+
                   {slots.map((s) => {
                     const count = getCount(dateKey, s.id);
                     const intensity = count / max;
-                    const bg = count === 0 ? (s.isHour ? SLOT_HOUR_BG : SLOT_BG) : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
+
+                    const bg =
+                      count === 0
+                        ? s.isHour
+                          ? SLOT_HOUR_BG
+                          : SLOT_BG
+                        : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
+
                     const names = getNames(dateKey, s.id).join(", ");
-                    const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
+                    const isSelected =
+                      selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
+
                     const slotInterval = formatSlotInterval(dateKey, s.id);
+
                     return (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => toggleSlot(dateKey, s)}
-                        aria-label={`${slotInterval.date}, ${slotInterval.range}: ${count} ${count === 1 ? "disponível" : "disponíveis"}`}
-                        title={`${slotInterval.date} ${slotInterval.range}: ${count}/${max}${names ? ` · ${names}` : ""}`}
-                        style={{ width: columnWidth, height: cellHeight, background: bg, border: "none", borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent", borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none", boxSizing: "border-box", color: count > 0 && intensity > 0.58 ? "#fff" : TEXT, fontSize: isPhone ? 9 : 10, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, cursor: "pointer", outline: isSelected ? `2px solid ${ACCENT_DARK}` : "none", outlineOffset: isSelected ? -2 : 0, boxShadow: isSelected ? "inset 0 0 0 2px #fff, 0 0 0 3px rgba(34,197,94,0.32)" : "none", transform: isSelected ? "scale(1.03)" : "scale(1)", position: "relative", zIndex: isSelected ? 2 : 1, touchAction: "manipulation" }}
+                        aria-label={`${slotInterval.date}, ${slotInterval.range}: ${count} ${
+                          count === 1 ? "disponível" : "disponíveis"
+                        }`}
+                        title={`${slotInterval.date} ${slotInterval.range}: ${count}/${max}${
+                          names ? ` · ${names}` : ""
+                        }`}
+                        style={{
+                          width: columnWidth,
+                          height: cellHeight,
+                          background: bg,
+                          border: "none",
+                          borderTop: s.isHour
+                            ? `1px solid ${BORDER}`
+                            : "1px solid transparent",
+                          borderRight:
+                            di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                          boxSizing: "border-box",
+                          color: count > 0 && intensity > 0.58 ? "#fff" : TEXT,
+                          fontSize: isPhone ? 9 : 10,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 900,
+                          cursor: "pointer",
+                          outline: isSelected ? `2px solid ${ACCENT_DARK}` : "none",
+                          outlineOffset: isSelected ? -2 : 0,
+                          boxShadow: isSelected
+                            ? "inset 0 0 0 2px #fff, 0 0 0 3px rgba(34,197,94,0.32)"
+                            : "none",
+                          transform: isSelected ? "scale(1.03)" : "scale(1)",
+                          position: "relative",
+                          zIndex: isSelected ? 2 : 1,
+                          touchAction: "manipulation",
+                        }}
                       />
                     );
                   })}
@@ -1359,17 +2524,45 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
             </div>
           </div>
         </div>
-        <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: isPhone ? "center" : "flex-start", gap: 5, fontSize: 11, color: MUTED2 }}>
+
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isPhone ? "center" : "flex-start",
+            gap: 5,
+            fontSize: 11,
+            color: MUTED2,
+          }}
+        >
           <span>0</span>
+
           {[0.1, 0.3, 0.5, 0.7, 0.85, 1].map((v, i) => (
-            <div key={i} style={{ width: isPhone ? 16 : 18, height: 9, borderRadius: 999, background: `rgba(34, 197, 94, ${0.16 + v * 0.78})` }} />
+            <div
+              key={i}
+              style={{
+                width: isPhone ? 16 : 18,
+                height: 9,
+                borderRadius: 999,
+                background: `rgba(34, 197, 94, ${0.16 + v * 0.78})`,
+              }}
+            />
           ))}
+
           <span>{max}</span>
         </div>
       </div>
+
       <div ref={peoplePanelRef} style={{ scrollMarginTop: 18 }}>
         {(selectedSlot || !isPhone) && (
-          <SlotPeoplePanel selectedSlot={selectedSlot} selectedCount={selectedCount} selectedNames={selectedNames} onClose={() => setSelectedSlot(null)} isPhone={isPhone} />
+          <SlotPeoplePanel
+            selectedSlot={selectedSlot}
+            selectedCount={selectedCount}
+            selectedNames={selectedNames}
+            onClose={() => setSelectedSlot(null)}
+            isPhone={isPhone}
+          />
         )}
       </div>
     </div>
@@ -1379,33 +2572,103 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
 function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, isPhone }) {
   if (!selectedSlot) {
     return (
-      <aside style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, color: MUTED2, fontSize: 13, position: "sticky", top: 16, boxShadow: SOFT_SHADOW }}>
+      <aside
+        style={{
+          background: SURFACE,
+          border: `1px solid ${BORDER}`,
+          borderRadius: 24,
+          padding: 16,
+          color: MUTED2,
+          fontSize: 13,
+          position: "sticky",
+          top: 16,
+          boxShadow: SOFT_SHADOW,
+        }}
+      >
         Carrega num slot do heatmap para veres quem está disponível.
       </aside>
     );
   }
+
   const slotInterval = formatSlotInterval(selectedSlot.dateKey, selectedSlot.slotId);
+
   return (
-    <aside style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: 16, marginTop: isPhone ? 14 : 0, position: isPhone ? "static" : "sticky", top: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.28)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+    <aside
+      style={{
+        background: SURFACE2,
+        border: `1px solid ${BORDER}`,
+        borderRadius: 22,
+        padding: 16,
+        marginTop: isPhone ? 14 : 0,
+        position: isPhone ? "static" : "sticky",
+        top: 16,
+        boxShadow: "0 18px 50px rgba(0,0,0,0.28)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
         <div>
-          <p style={{ ...sectionTitle, marginBottom: 6 }}>disponíveis neste slot</p>
+          <p style={{ ...sectionTitle, marginBottom: 6 }}>Disponíveis neste slot</p>
+
           <h3 style={{ margin: 0, fontSize: 16 }}>{slotInterval.date}</h3>
-          <p style={{ margin: "4px 0 0", color: TEXT, fontSize: 14, fontWeight: 900 }}>
-            {slotInterval.range}{slotInterval.endDate ? ` · acaba em ${slotInterval.endDate}` : ""}
+
+          <p
+            style={{
+              margin: "4px 0 0",
+              color: TEXT,
+              fontSize: 14,
+              fontWeight: 900,
+            }}
+          >
+            {slotInterval.range}
+            {slotInterval.endDate ? ` · acaba em ${slotInterval.endDate}` : ""}
           </p>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
+
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: ACCENT_DARK,
+              fontSize: 13,
+              fontWeight: 900,
+            }}
+          >
+            {selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}
+          </p>
         </div>
-        <button onClick={onClose} style={{ ...miniButton, width: 32, height: 32 }}>×</button>
+
+        <button onClick={onClose} style={{ ...miniButton, width: 32, height: 32 }}>
+          ×
+        </button>
       </div>
+
       {selectedNames.length > 0 ? (
         <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
           {selectedNames.map((name) => (
-            <div key={name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>{name}</div>
+            <div
+              key={name}
+              style={{
+                background: SURFACE,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 16,
+                padding: "10px 12px",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              {name}
+            </div>
           ))}
         </div>
       ) : (
-        <p style={{ margin: "14px 0 0", color: MUTED2, fontSize: 13 }}>Ainda ninguém marcou este horário.</p>
+        <p style={{ margin: "14px 0 0", color: MUTED2, fontSize: 13 }}>
+          Ainda ninguém marcou este horário.
+        </p>
       )}
     </aside>
   );
@@ -1413,10 +2676,76 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
 
 // ─── Estilos estáticos ────────────────────────────────────────────────────────
 
-const modalCardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 30, padding: 24, boxShadow: CARD_SHADOW };
-const eventNameCardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, boxShadow: SOFT_SHADOW };
-const rangeCardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 16, boxShadow: SOFT_SHADOW };
-const calendarArrowButton = { background: "transparent", border: "none", color: TEXT, cursor: "pointer", width: 42, height: 42, borderRadius: 12, fontSize: 44, lineHeight: "28px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif" };
-const miniButton = { background: SURFACE, border: `1px solid ${BORDER}`, color: TEXT, cursor: "pointer", width: 34, height: 34, borderRadius: 10, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Sora', sans-serif" };
-const labelStyle = { color: MUTED2, fontSize: 12, fontWeight: 700 };
-const sectionTitle = { fontSize: 10, color: MUTED, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px", margin: "0 0 10px" };
+const modalCardStyle = {
+  background: SURFACE,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 30,
+  padding: 24,
+  boxShadow: CARD_SHADOW,
+};
+
+const eventNameCardStyle = {
+  background: SURFACE,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 24,
+  padding: 16,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  boxShadow: SOFT_SHADOW,
+};
+
+const rangeCardStyle = {
+  background: SURFACE,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 24,
+  padding: 16,
+  boxShadow: SOFT_SHADOW,
+};
+
+const calendarArrowButton = {
+  background: "transparent",
+  border: "none",
+  color: TEXT,
+  cursor: "pointer",
+  width: 42,
+  height: 42,
+  borderRadius: 12,
+  fontSize: 44,
+  lineHeight: "28px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontFamily: "Arial, sans-serif",
+};
+
+const miniButton = {
+  background: SURFACE,
+  border: `1px solid ${BORDER}`,
+  color: TEXT,
+  cursor: "pointer",
+  width: 34,
+  height: 34,
+  borderRadius: 10,
+  fontSize: 16,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontFamily: "'Sora', sans-serif",
+};
+
+const labelStyle = {
+  color: MUTED2,
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const sectionTitle = {
+  fontSize: 10,
+  color: MUTED,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.7px",
+  margin: "0 0 10px",
+};
