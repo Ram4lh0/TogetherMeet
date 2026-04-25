@@ -654,7 +654,7 @@ export default function App() {
           <div style={{ textAlign: "center", marginBottom: 34 }}>
             <div style={{ width: 68, height: 68, background: ACCENT_SOFT, borderRadius: 24, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}`, boxShadow: SOFT_SHADOW }}>⚽</div>
             <h1 style={{ margin: 0, fontSize: 32, color: "#166534", letterSpacing: "-1px" }}>Organiza Eventos</h1>
-            <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>Já que o Pedro não dá conta disto, organiza aqui a melhor hora para todos.</p>
+            <p style={{ margin: "40px 0 0", color: MUTED2, fontSize: 13 }}>Já que o Pedro não dá conta disto, organiza aqui a melhor hora para todos.</p>
           </div>
 
           {missingEventId && (
