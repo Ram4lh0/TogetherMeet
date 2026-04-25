@@ -324,6 +324,7 @@ function applyThemeMode(mode) {
     document.documentElement.style.setProperty(name, value);
   });
   document.documentElement.dataset.peladaTheme = mode;
+  document.documentElement.style.colorScheme = mode === "dark" ? "dark" : "light";
   document.body.style.background = theme.vars["--pelada-bg"];
 }
 
@@ -364,6 +365,7 @@ export default function App() {
 
   // Create event
   const [eventTitle, setEventTitle] = useState("");
+  const [creatorName, setCreatorName] = useState("");
   const [createStep, setCreateStep] = useState("title");
   const [selectedDates, setSelectedDates] = useState({});
   const [calendarStart, setCalendarStart] = useState(() => startOfWeekSunday(new Date()));
@@ -476,14 +478,14 @@ export default function App() {
   const createEvent = () => {
     if (createSubmitting.current) return;
     blurActiveElement();
-    if (!eventTitle.trim() || selectedDateKeys.length === 0) return;
+    if (!eventTitle.trim() || !creatorName.trim() || selectedDateKeys.length === 0) return;
     createSubmitting.current = true;
 
     const id = uid();
     const newEvent = {
       id,
       title: eventTitle.trim(),
-      creatorName: "",
+      creatorName: creatorName.trim(),
       dates: selectedDateKeys,
       startTime,
       endTime,
@@ -493,7 +495,7 @@ export default function App() {
 
     updateEvents((prev) => ({ ...prev, [id]: newEvent }));
     setCurrentEventId(id);
-    setParticipantName("");
+    setParticipantName(creatorName.trim());
     setAvailability({});
     window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
     setCreateStep("title");
@@ -510,6 +512,18 @@ export default function App() {
     const existing = currentEvent.responses?.find(
       (r) => normalizeName(r.name) === normalizeName(name)
     );
+    setAvailability(existing?.availability || {});
+    setScreen("fill");
+  };
+
+  const startCreatorResponse = () => {
+    const name = currentEvent?.creatorName?.trim();
+    if (!name || !currentEvent) return;
+
+    const existing = currentEvent.responses?.find(
+      (r) => normalizeName(r.name) === normalizeName(name)
+    );
+    setParticipantName(name);
     setAvailability(existing?.availability || {});
     setScreen("fill");
   };
@@ -627,6 +641,7 @@ export default function App() {
     setCurrentEventId(null);
     setParticipantName("");
     setAvailability({});
+    setCreatorName("");
     setCreateStep("title");
     window.history.pushState({}, "", window.location.pathname);
   };
@@ -650,7 +665,7 @@ export default function App() {
 
           <div style={{ display: "grid", gap: 12 }}>
             <button onClick={() => { setCreateStep("title"); setScreen("create"); }} style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%", boxShadow: "0 14px 32px rgba(34,197,94,0.22)" }}>
-              criar evento
+              Criar Evento
             </button>
 
             <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: 16 }}>
@@ -660,7 +675,7 @@ export default function App() {
               <div style={{ display: "flex", gap: 8 }}>
                 <input value={eventCode} onChange={(e) => setEventCode(e.target.value)} placeholder="código do evento" style={inputStyle} />
                 <button onClick={() => openEvent(eventCode)} disabled={!events[eventCode.trim()]} style={{ ...buttonBase, background: events[eventCode.trim()] ? ACCENT : SURFACE, color: events[eventCode.trim()] ? "#fff" : MUTED2, whiteSpace: "nowrap" }}>
-                  entrar
+                  Entrar
                 </button>
               </div>
             </div>
@@ -688,8 +703,8 @@ export default function App() {
 
   // ───────────────────────────────────────────────────────────── CREATE
   if (screen === "create") {
-    const canContinueTitle = eventTitle.trim().length > 0;
-    const canCreate = eventTitle.trim() && selectedDateKeys.length > 0;
+    const canContinueTitle = eventTitle.trim().length > 0 && creatorName.trim().length > 0;
+    const canCreate = eventTitle.trim() && creatorName.trim() && selectedDateKeys.length > 0;
     const crossesMidnight = parseTime(endTime) <= parseTime(startTime);
 
     if (createStep === "title") {
@@ -712,17 +727,30 @@ export default function App() {
               </h1>
 
               <p style={{ margin: "0 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>
-                Dá um nome simples para a malta perceber logo o plano.
+                Dá um nome ao evento e identifica o criador. A primeira disponibilidade fica automaticamente associada ao criador.
               </p>
 
-              <input
-                autoFocus
-                value={eventTitle}
-                onChange={(e) => setEventTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && canContinueTitle && setCreateStep("details")}
-                placeholder="ex.: Futsal sexta à noite"
-                style={{ ...inputStyle, fontSize: 17, padding: "16px 17px" }}
-              />
+              <label style={{ ...labelStyle, display: "block", marginBottom: 12 }}>
+                Nome do evento
+                <input
+                  autoFocus
+                  value={eventTitle}
+                  onChange={(e) => setEventTitle(e.target.value)}
+                  placeholder="ex.: Futsal sexta à noite"
+                  style={{ ...inputStyle, fontSize: 17, padding: "16px 17px", marginTop: 7 }}
+                />
+              </label>
+
+              <label style={{ ...labelStyle, display: "block" }}>
+                Nome do criador
+                <input
+                  value={creatorName}
+                  onChange={(e) => setCreatorName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && canContinueTitle && setCreateStep("details")}
+                  placeholder="ex.: António"
+                  style={{ ...inputStyle, fontSize: 17, padding: "16px 17px", marginTop: 7 }}
+                />
+              </label>
 
               <button
                 onClick={() => setCreateStep("details")}
@@ -736,7 +764,7 @@ export default function App() {
                   boxShadow: canContinueTitle ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
                 }}
               >
-                continuar
+                Continuar
               </button>
             </div>
           </div>
@@ -748,7 +776,7 @@ export default function App() {
       <div style={{ ...BASE, padding: isPhone ? "16px 12px 28px" : "22px 16px" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           <Header
-            title="criar evento"
+            title="Criar Evento"
             subtitle="escolhe os dias e o intervalo de horas"
             onBack={() => setCreateStep("title")}
           />
@@ -757,18 +785,21 @@ export default function App() {
             <div style={eventNameCardStyle}>
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: "0 0 5px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-                  nome do evento
+                  evento
                 </p>
                 <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {eventTitle}
                 </h2>
+                <p style={{ margin: "5px 0 0", color: MUTED2, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  Criado por {creatorName}
+                </p>
               </div>
 
               <button
                 onClick={() => setCreateStep("title")}
                 style={{ ...miniButton, width: "auto", paddingInline: 12, fontSize: 12, fontWeight: 800 }}
               >
-                editar
+                Editar
               </button>
             </div>
 
@@ -869,7 +900,7 @@ export default function App() {
                 boxShadow: canCreate ? "0 14px 32px rgba(34,197,94,0.22)" : "none",
               }}
             >
-              criar evento
+              Criar Evento
             </button>
           </div>
         </div>
@@ -891,8 +922,9 @@ export default function App() {
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button onClick={copyLink} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>{copied ? "copiado" : "copiar link"}</button>
-            <button onClick={() => setScreen("event")} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>abrir evento</button>
+            <button onClick={startCreatorResponse} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>Preencher Disponibilidade</button>
+            <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "Copiado" : "Copiar Link"}</button>
+            <button onClick={() => setScreen("event")} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>Abrir Evento</button>
           </div>
         </div>
       </div>
@@ -906,16 +938,26 @@ export default function App() {
         <div style={{ width: "100%", maxWidth: 460 }}>
           <Header title={currentEvent.title} subtitle={`${currentEvent.dates.length} dia${currentEvent.dates.length !== 1 ? "s" : ""} possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${currentEvent.startTime} às ${currentEvent.endTime}`} onBack={resetToHome} />
 
-          <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18 }}>
-            <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>Para responder ou editar, escreve o teu nome.</p>
-            <input autoFocus value={participantName} onChange={(e) => setParticipantName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && startResponse()} placeholder="o teu nome" style={inputStyle} />
-            <button onClick={startResponse} disabled={!participantName.trim()} style={{ ...buttonBase, background: participantName.trim() ? ACCENT : SURFACE, color: participantName.trim() ? "#fff" : MUTED2, width: "100%", marginTop: 10 }}>
-              {currentParticipantResponse ? "editar disponibilidade" : "preencher disponibilidade"}
-            </button>
-          </div>
+          {(currentEvent.responses?.length || 0) === 0 && currentEvent.creatorName ? (
+            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18 }}>
+              <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 12 }}>Primeira resposta</p>
+              <h3 style={{ margin: "0 0 12px", fontSize: 18 }}>Criador: {currentEvent.creatorName}</h3>
+              <button onClick={startCreatorResponse} style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%" }}>
+                Preencher Disponibilidade
+              </button>
+            </div>
+          ) : (
+            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18 }}>
+              <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>Para responder ou editar, escreve o teu nome.</p>
+              <input autoFocus value={participantName} onChange={(e) => setParticipantName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && startResponse()} placeholder="o teu nome" style={inputStyle} />
+              <button onClick={startResponse} disabled={!participantName.trim()} style={{ ...buttonBase, background: participantName.trim() ? ACCENT : SURFACE, color: participantName.trim() ? "#fff" : MUTED2, width: "100%", marginTop: 10 }}>
+                {currentParticipantResponse ? "Editar Disponibilidade" : "Preencher Disponibilidade"}
+              </button>
+            </div>
+          )}
 
           <button onClick={() => setScreen("results")} style={{ marginTop: 16, background: "transparent", color: MUTED2, border: "none", cursor: "pointer", fontFamily: "'Sora', sans-serif", width: "100%" }}>
-            ver resultados · {currentEvent.responses?.length || 0} resposta{(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}
+            Ver Resultados · {currentEvent.responses?.length || 0} resposta{(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}
           </button>
         </div>
       </div>
@@ -925,7 +967,7 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── FILL
   if (screen === "fill" && currentEvent) {
     const canSaveResponse = participantName.trim().length > 0;
-    const editingLabel = currentParticipantResponse ? "guardar alterações" : "guardar resposta";
+    const editingLabel = currentParticipantResponse ? "Guardar Alterações" : "Guardar Disponibilidade";
 
     return withTheme(
       <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: isPhone ? "16px 12px calc(92px + env(safe-area-inset-bottom))" : "20px 16px", userSelect: "none" }}>
@@ -938,15 +980,10 @@ export default function App() {
           />
 
           <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, marginBottom: 14 }}>
-            <label style={labelStyle}>
-              Nome da tua resposta
-              <input
-                value={participantName}
-                onChange={(e) => setParticipantName(e.target.value)}
-                placeholder="o teu nome"
-                style={{ ...inputStyle, marginTop: 8 }}
-              />
-            </label>
+            <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 11, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.7px" }}>
+              Resposta de
+            </p>
+            <strong style={{ display: "block", color: TEXT, fontSize: 16 }}>{participantName || currentEvent.creatorName}</strong>
             <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>
               Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.
             </p>
@@ -977,11 +1014,11 @@ export default function App() {
     return withTheme(
       <div style={{ ...BASE, padding: "20px 16px" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <Header title="resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
-
-          <BestOptionsList bestOptions={bestOptions} />
+          <Header title="Resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
 
           <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
+
+          <BestOptionsList bestOptions={bestOptions} />
 
           {(currentEvent.responses?.length || 0) > 0 && (
             <div style={{ marginTop: 26 }}>
@@ -997,11 +1034,10 @@ export default function App() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 28 }}>
             {currentParticipantResponse && (
               <button onClick={editCurrentAvailability} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>
-                editar a minha disponibilidade
+                Editar a Minha Disponibilidade
               </button>
             )}
-            <button onClick={() => { setParticipantName(""); setAvailability({}); setScreen("event"); }} style={{ ...buttonBase, background: "transparent", color: ACCENT, border: `1.5px solid ${BORDER}` }}>+ adicionar resposta</button>
-            <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "copiado" : "copiar link"}</button>
+            <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "Copiado" : "Copiar Link"}</button>
           </div>
         </div>
       </div>
@@ -1025,8 +1061,9 @@ function ThemeToggle({ mode, onToggle }) {
         top: "calc(10px + env(safe-area-inset-top))",
         right: "calc(10px + env(safe-area-inset-right))",
         zIndex: 999,
-        width: 42,
+        minWidth: 42,
         height: 42,
+        padding: "0 12px",
         borderRadius: 999,
         border: `1px solid ${BORDER}`,
         background: SURFACE2,
@@ -1035,13 +1072,16 @@ function ThemeToggle({ mode, onToggle }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        gap: 7,
         cursor: "pointer",
-        fontSize: 18,
+        fontSize: 12,
+        fontWeight: 800,
         fontFamily: "'Sora', sans-serif",
         touchAction: "manipulation",
       }}
     >
-      <span aria-hidden="true">{theme.icon}</span>
+      <span aria-hidden="true" style={{ fontSize: 16 }}>{theme.icon}</span>
+      <span>{mode === "dark" ? "Modo Claro" : "Dark Mode"}</span>
     </button>
   );
 }
@@ -1165,7 +1205,7 @@ function BestOptionsList({ bestOptions }) {
   }
 
   return (
-    <div style={{ marginBottom: isPhone ? 12 : 16 }}>
+    <div style={{ marginTop: isPhone ? 16 : 20, marginBottom: isPhone ? 12 : 16 }}>
       <p style={sectionTitle}>melhores opções</p>
       <div style={{ display: "grid", gap: 8 }}>
         {bestOptions.map((o, index) => (
@@ -1185,7 +1225,7 @@ function BestOptionsList({ bestOptions }) {
           >
             <div style={{ minWidth: 0 }}>
               <strong style={{ display: "block", fontSize: isPhone ? 13 : 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {index + 1}. {formatDateLong(o.dateKey)} · {o.slot.label}{o.slot.dayOffset ? " +1" : ""}
+                {index + 1}. {formatSlotInterval(o.dateKey, o.slot.id).date} · {formatSlotInterval(o.dateKey, o.slot.id).range}
               </strong>
               <div style={{ color: MUTED2, fontSize: 12, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {o.names.join(", ")}
@@ -1410,7 +1450,7 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
           <p style={{ margin: "4px 0 0", color: TEXT, fontSize: 14, fontWeight: 900 }}>
             {slotInterval.range}{slotInterval.endDate ? ` · acaba em ${slotInterval.endDate}` : ""}
           </p>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
+          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
