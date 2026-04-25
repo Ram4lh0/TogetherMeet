@@ -1663,19 +1663,7 @@ ${currentEvent.id}`;
           >
             Partilhar WhatsApp
           </button>
-
-          <button
-            onClick={() => setScreen("event")}
-            style={{
-              ...buttonBase,
-              background: SURFACE,
-              color: TEXT,
-              border: `1px solid ${BORDER}`,
-            }}
-          >
-            Abrir Evento
-          </button>
-
+          
           <button
             onClick={copyLink}
             style={{
