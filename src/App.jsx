@@ -152,6 +152,23 @@ function timeLabel(totalMinutes) {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
+function formatSlotInterval(dateKey, slotId, duration = 30) {
+  const startTotal = Number(slotId);
+  const endTotal = startTotal + duration;
+  const startDayOffset = Math.floor(startTotal / 1440);
+  const endDayOffset = Math.floor(endTotal / 1440);
+  const startDateKey = dateToKey(addDays(keyToDate(dateKey), startDayOffset));
+  const endDateKey = dateToKey(addDays(keyToDate(dateKey), endDayOffset));
+  const start = timeLabel(startTotal);
+  const end = timeLabel(endTotal);
+
+  return {
+    date: formatDateLong(startDateKey),
+    range: `${start}–${end}`,
+    endDate: endDateKey !== startDateKey ? formatDateLong(endDateKey) : null,
+  };
+}
+
 function normalizeName(name) {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -1144,12 +1161,14 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                       : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
                     const names = getNames(dateKey, s.id).join(", ");
                     const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
+                    const slotInterval = formatSlotInterval(dateKey, s.id);
                     return (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => toggleSlot(dateKey, s)}
-                        title={`${formatDateLong(dateKey)} ${s.label}${s.dayOffset ? " +1" : ""}: ${count}/${max}${names ? ` · ${names}` : ""}`}
+                        aria-label={`${slotInterval.date}, ${slotInterval.range}: ${count} ${count === 1 ? "disponível" : "disponíveis"}`}
+                        title={`${slotInterval.date} ${slotInterval.range}: ${count}/${max}${names ? ` · ${names}` : ""}`}
                         style={{
                           width: columnWidth,
                           height: cellHeight,
@@ -1173,9 +1192,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                           zIndex: isSelected ? 2 : 1,
                           touchAction: "manipulation",
                         }}
-                      >
-                        {count > 0 ? count : ""}
-                      </button>
+                      />
                     );
                   })}
                 </div>
@@ -1216,13 +1233,18 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
     );
   }
 
+  const slotInterval = formatSlotInterval(selectedSlot.dateKey, selectedSlot.slotId);
+
   return (
     <aside style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: 16, marginTop: isPhone ? 14 : 0, position: isPhone ? "static" : "sticky", top: 16, boxShadow: "0 18px 50px rgba(0,0,0,0.28)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div>
           <p style={{ ...sectionTitle, marginBottom: 6 }}>disponíveis neste slot</p>
-          <h3 style={{ margin: 0, fontSize: 16 }}>{formatDateLong(selectedSlot.dateKey)} · {selectedSlot.label}{selectedSlot.dayOffset ? " +1" : ""}</h3>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{slotInterval.date}</h3>
+          <p style={{ margin: "4px 0 0", color: TEXT, fontSize: 14, fontWeight: 900 }}>
+            {slotInterval.range}{slotInterval.endDate ? ` · acaba em ${slotInterval.endDate}` : ""}
+          </p>
+          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
