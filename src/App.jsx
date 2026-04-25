@@ -9,18 +9,7 @@ if (typeof document !== "undefined" && !document.getElementById("pelada-font")) 
   document.head.appendChild(link);
 }
 
-const STORAGE_KEY = "pelada_events_v1";
-
-const ACCENT = "#c9f000";
-const BG = "#070707";
-const SURFACE = "#121212";
-const SURFACE2 = "#0e0e0e";
-const BORDER = "#1e1e1e";
-const MUTED = "#3a3a3a";
-const MUTED2 = "#777";
-const TEXT = "#f2f2f2";
-const DANGER = "#ff6b6b";
-
+// Mobile/iPhone friendly defaults
 if (typeof document !== "undefined") {
   if (!document.querySelector('meta[name="viewport"]')) {
     const meta = document.createElement("meta");
@@ -29,20 +18,29 @@ if (typeof document !== "undefined") {
     document.head.appendChild(meta);
   }
 
-  if (!document.getElementById("pelada-mobile-reset")) {
+  if (!document.getElementById("pelada-mobile-style")) {
     const style = document.createElement("style");
-    style.id = "pelada-mobile-reset";
+    style.id = "pelada-mobile-style";
     style.textContent = `
-      html, body, #root { min-height: 100%; background: ${BG}; }
-      body { margin: 0; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+      html, body, #root { min-height: 100%; margin: 0; background: #050816; }
       * { -webkit-tap-highlight-color: transparent; }
-      input, button { -webkit-appearance: none; }
-      input[type="time"] { color-scheme: dark; min-width: 0; }
-      input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.65; }
+      button, input { font: inherit; }
     `;
     document.head.appendChild(style);
   }
 }
+
+const STORAGE_KEY = "pelada_events_v1";
+
+const ACCENT = "#7c3aed";
+const BG = "#050816";
+const SURFACE = "#111827";
+const SURFACE2 = "#0f172a";
+const BORDER = "#243041";
+const MUTED = "#64748b";
+const MUTED2 = "#94a3b8";
+const TEXT = "#f8fafc";
+const DANGER = "#fb7185";
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
@@ -69,22 +67,26 @@ const BASE = {
 
 const buttonBase = {
   border: "none",
-  borderRadius: 14,
+  borderRadius: 16,
   padding: "13px 18px",
-  fontSize: 14,
+  fontSize: 15,
   fontWeight: 700,
+  letterSpacing: "-0.2px",
+  boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
   fontFamily: "'Sora', sans-serif",
   cursor: "pointer",
+  minHeight: 48,
+  touchAction: "manipulation",
 };
 
 const inputStyle = {
   width: "100%",
   background: SURFACE,
   border: `1.5px solid ${BORDER}`,
-  borderRadius: 14,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+  borderRadius: 16,
   padding: "14px 16px",
   fontSize: 16,
-  lineHeight: "20px",
   color: TEXT,
   fontFamily: "'Sora', sans-serif",
   outline: "none",
@@ -201,33 +203,29 @@ function saveEvents(events) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
 }
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 720px)").matches : false
-  );
+
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.innerWidth <= 760;
+  });
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const media = window.matchMedia("(max-width: 720px)");
-    const update = () => setIsMobile(media.matches);
-
-    update();
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
+    const onResize = () => setIsPhone(window.innerWidth <= 760);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  return isMobile;
+  return isPhone;
 }
-
 export default function App() {
-  const isMobile = useIsMobile();
   const [events, setEvents] = useState({});
   const [screen, setScreen] = useState("home");
   const [currentEventId, setCurrentEventId] = useState(null);
   const [missingEventId, setMissingEventId] = useState(null);
 
   // Create event
-  const [creatorName, setCreatorName] = useState("");
   const [eventTitle, setEventTitle] = useState("");
   const [selectedDates, setSelectedDates] = useState({});
   const [calendarStart, setCalendarStart] = useState(() => startOfWeekSunday(new Date()));
@@ -239,11 +237,11 @@ export default function App() {
   const [participantName, setParticipantName] = useState("");
   const [availability, setAvailability] = useState({});
   const [copied, setCopied] = useState(false);
-  const [selectedResultSlot, setSelectedResultSlot] = useState(null);
 
   const dragging = useRef(false);
   const dragVal = useRef(true);
 
+  const isPhone = useIsPhone();
   useEffect(() => {
     const stored = loadEvents();
     setEvents(stored);
@@ -273,10 +271,6 @@ export default function App() {
       window.removeEventListener("touchend", stop);
     };
   }, []);
-
-  useEffect(() => {
-    setSelectedResultSlot(null);
-  }, [screen, currentEventId]);
 
   const currentEvent = currentEventId ? events[currentEventId] : null;
 
@@ -319,13 +313,13 @@ export default function App() {
   };
 
   const createEvent = () => {
-    if (!eventTitle.trim() || !creatorName.trim() || selectedDateKeys.length === 0) return;
+    if (!eventTitle.trim() || selectedDateKeys.length === 0) return;
 
     const id = uid();
     const newEvent = {
       id,
       title: eventTitle.trim(),
-      creatorName: creatorName.trim(),
+      creatorName: "",
       dates: selectedDateKeys,
       startTime,
       endTime,
@@ -335,8 +329,10 @@ export default function App() {
 
     updateEvents((prev) => ({ ...prev, [id]: newEvent }));
     setCurrentEventId(id);
+    setParticipantName("");
+    setAvailability({});
     window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
-    setScreen("created");
+    setScreen("fill");
   };
 
   const startResponse = () => {
@@ -377,12 +373,16 @@ export default function App() {
     const name = participantName.trim();
     if (!currentEvent || !name) return;
 
+    const cleanAvailability = Object.fromEntries(
+      Object.entries(availability).filter(([, value]) => !!value)
+    );
+
     updateEvents((prev) => {
       const ev = prev[currentEvent.id];
       const responses = ev.responses || [];
       const nextResponses = [
         ...responses.filter((r) => r.name.trim().toLowerCase() !== name.toLowerCase()),
-        { name, availability, updatedAt: new Date().toISOString() },
+        { name, availability: cleanAvailability, updatedAt: new Date().toISOString() },
       ];
       return { ...prev, [ev.id]: { ...ev, responses: nextResponses } };
     });
@@ -402,12 +402,25 @@ export default function App() {
       .map((r) => r.name);
   };
 
+
+  const currentParticipantResponse = useMemo(() => {
+    const name = participantName.trim().toLowerCase();
+    if (!currentEvent || !name) return null;
+    return (currentEvent.responses || []).find((r) => r.name.trim().toLowerCase() === name) || null;
+  }, [currentEvent, participantName]);
+
+  const editCurrentAvailability = () => {
+    if (!currentParticipantResponse) return;
+    setAvailability(currentParticipantResponse.availability || {});
+    setScreen("fill");
+  };
   const bestOptions = useMemo(() => {
     if (!currentEvent) return [];
     const rows = [];
     for (const d of eventDates) {
       for (const s of slots) {
         const count = getCount(d, s.id);
+
         if (count > 0) {
           rows.push({
             dateKey: d,
@@ -418,26 +431,8 @@ export default function App() {
         }
       }
     }
-    return rows.sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id)).slice(0, 6);
+    return rows.sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id)).slice(0, 4);
   }, [currentEvent, eventDates, slots]);
-
-  const selectedSlotDetails = useMemo(() => {
-    if (!currentEvent || !selectedResultSlot) return null;
-
-    const slot = slots.find((s) => s.id === selectedResultSlot.slotId);
-    if (!slot) return null;
-
-    const names = (currentEvent.responses || [])
-      .filter((r) => r.availability?.[slotKey(selectedResultSlot.dateKey, selectedResultSlot.slotId)])
-      .map((r) => r.name);
-
-    return {
-      dateKey: selectedResultSlot.dateKey,
-      slot,
-      names,
-      count: names.length,
-    };
-  }, [currentEvent, selectedResultSlot, slots]);
 
   const selectedCount = Object.values(availability).filter(Boolean).length;
 
@@ -462,10 +457,10 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── HOME
   if (screen === "home") {
     return (
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))" : 24 }}>
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 440 }}>
           <div style={{ textAlign: "center", marginBottom: 34 }}>
-            <div style={{ width: 68, height: 68, background: SURFACE, borderRadius: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}` }}>⚽</div>
+            <div style={{ width: 68, height: 68, background: "linear-gradient(180deg, rgba(124,58,237,0.24), rgba(59,130,246,0.18))", borderRadius: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid rgba(124,58,237,0.22)`, boxShadow: "0 18px 44px rgba(0,0,0,0.18)" }}>⚽</div>
             <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-1px" }}>pelada</h1>
             <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>cria eventos e encontra a melhor hora</p>
           </div>
@@ -477,7 +472,7 @@ export default function App() {
           )}
 
           <div style={{ display: "grid", gap: 12 }}>
-            <button onClick={() => setScreen("create")} style={{ ...buttonBase, background: ACCENT, color: "#000", width: "100%" }}>
+            <button onClick={() => setScreen("create")} style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%" }}>
               criar evento
             </button>
 
@@ -487,7 +482,7 @@ export default function App() {
               </p>
               <div style={{ display: "flex", gap: 8 }}>
                 <input value={eventCode} onChange={(e) => setEventCode(e.target.value)} placeholder="código do evento" style={inputStyle} />
-                <button onClick={() => openEvent(eventCode)} disabled={!events[eventCode.trim()]} style={{ ...buttonBase, background: events[eventCode.trim()] ? ACCENT : SURFACE, color: events[eventCode.trim()] ? "#000" : MUTED2, whiteSpace: "nowrap" }}>
+                <button onClick={() => openEvent(eventCode)} disabled={!events[eventCode.trim()]} style={{ ...buttonBase, background: events[eventCode.trim()] ? ACCENT : SURFACE, color: events[eventCode.trim()] ? "#fff" : MUTED2, whiteSpace: "nowrap" }}>
                   entrar
                 </button>
               </div>
@@ -498,7 +493,7 @@ export default function App() {
                 <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>eventos neste browser</p>
                 <div style={{ display: "grid", gap: 8 }}>
                   {Object.values(events).slice().reverse().map((ev) => (
-                    <button key={ev.id} onClick={() => openEvent(ev.id)} style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: TEXT, borderRadius: 14, padding: 14, textAlign: "left", cursor: "pointer", fontFamily: "'Sora', sans-serif" }}>
+                    <button key={ev.id} onClick={() => openEvent(ev.id)} style={{ background: "rgba(17,24,39,0.92)", border: `1px solid ${BORDER}`, color: TEXT, borderRadius: 16, padding: 14, textAlign: "left", cursor: "pointer", fontFamily: "'Sora', sans-serif", boxShadow: "0 14px 32px rgba(0,0,0,0.12)" }}>
                       <strong>{ev.title}</strong>
                       <span style={{ display: "block", marginTop: 4, color: MUTED2, fontSize: 12 }}>
                         {ev.dates.length} dia{ev.dates.length !== 1 ? "s" : ""} · {ev.responses?.length || 0} resposta{(ev.responses?.length || 0) !== 1 ? "s" : ""}
@@ -516,17 +511,16 @@ export default function App() {
 
   // ───────────────────────────────────────────────────────────── CREATE
   if (screen === "create") {
-    const canCreate = eventTitle.trim() && creatorName.trim() && selectedDateKeys.length > 0;
+    const canCreate = eventTitle.trim() && selectedDateKeys.length > 0;
     const crossesMidnight = parseTime(endTime) <= parseTime(startTime);
 
     return (
-      <div style={{ ...BASE, padding: isMobile ? "calc(16px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom))" : "22px 16px" }}>
+      <div style={{ ...BASE, padding: "22px 16px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <Header title="criar evento" subtitle="define dias e horas possíveis" onBack={resetToHome} />
 
           <div style={{ display: "grid", gap: 14 }}>
             <input value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} placeholder="nome do evento, ex.: futsal sexta" style={inputStyle} />
-            <input value={creatorName} onChange={(e) => setCreatorName(e.target.value)} placeholder="o teu nome" style={inputStyle} />
 
             <IntegratedCalendarPicker
               startDate={calendarStart}
@@ -539,22 +533,25 @@ export default function App() {
             {selectedDateKeys.length > 0 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: -2 }}>
                 {selectedDateKeys.map((d) => (
-                  <span key={d} style={{ background: `${ACCENT}22`, border: `1px solid ${ACCENT}55`, color: ACCENT, borderRadius: 20, padding: "6px 10px", fontSize: 12 }}>
+                  <span key={d} style={{ background: `rgba(124,58,237,0.12)`, border: `1px solid rgba(124,58,237,0.34)`, color: "#c4b5fd", borderRadius: 20, padding: "6px 10px", fontSize: 12 }}>
                     {formatDateLong(d)}
                   </span>
                 ))}
               </div>
             )}
 
-            <TimeRangeCard
-              startTime={startTime}
-              endTime={endTime}
-              onStartTimeChange={setStartTime}
-              onEndTimeChange={setEndTime}
-              crossesMidnight={crossesMidnight}
-            />
+            <div style={{ background: "rgba(15,23,42,0.9)", border: `1px solid ${BORDER}`, borderRadius: 22, padding: 16, boxShadow: "0 16px 40px rgba(0,0,0,0.14)" }}>
+              <p style={{ margin: "0 0 12px", color: MUTED2, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>range de horas disponível</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label style={labelStyle}>Das<input type="time" step="1800" value={startTime} onChange={(e) => setStartTime(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} /></label>
+                <label style={labelStyle}>Até<input type="time" step="1800" value={endTime} onChange={(e) => setEndTime(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} /></label>
+              </div>
+              <p style={{ margin: "10px 0 0", color: crossesMidnight ? ACCENT : MUTED2, fontSize: 12 }}>
+                {crossesMidnight ? "Este range passa da meia-noite. Ex.: 21:30 → 04:00." : "Os participantes só poderão escolher slots dentro deste intervalo."}
+              </p>
+            </div>
 
-            <button onClick={createEvent} disabled={!canCreate} style={{ ...buttonBase, background: canCreate ? ACCENT : SURFACE, color: canCreate ? "#000" : MUTED2 }}>
+            <button onClick={createEvent} disabled={!canCreate} style={{ ...buttonBase, background: canCreate ? ACCENT : SURFACE, color: canCreate ? "#fff" : MUTED2 }}>
               criar evento
             </button>
           </div>
@@ -566,18 +563,18 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── CREATED
   if (screen === "created" && currentEvent) {
     return (
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))" : 24 }}>
-        <div style={{ width: "100%", maxWidth: 520, background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 22 }}>
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ width: "100%", maxWidth: 520, background: "rgba(15,23,42,0.92)", border: `1px solid ${BORDER}`, borderRadius: 26, padding: 22, boxShadow: "0 18px 44px rgba(0,0,0,0.18)" }}>
           <p style={{ margin: 0, color: ACCENT, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.7px" }}>evento criado</p>
           <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
           <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>Partilha este link com quem queres convidar.</p>
 
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 14, fontSize: 12, color: MUTED2, wordBreak: "break-all" }}>
+          <div style={{ background: "rgba(17,24,39,0.9)", border: `1px solid ${BORDER}`, borderRadius: 16, padding: 14, fontSize: 12, color: MUTED2, wordBreak: "break-all" }}>
             {eventLink}
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button onClick={copyLink} style={{ ...buttonBase, background: ACCENT, color: "#000" }}>{copied ? "copiado" : "copiar link"}</button>
+            <button onClick={copyLink} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>{copied ? "copiado" : "copiar link"}</button>
             <button onClick={() => setScreen("event")} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>abrir evento</button>
           </div>
         </div>
@@ -588,15 +585,15 @@ export default function App() {
   // ───────────────────────────────────────────────────────────── EVENT LANDING
   if (screen === "event" && currentEvent) {
     return (
-      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom))" : 24 }}>
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ width: "100%", maxWidth: 460 }}>
           <Header title={currentEvent.title} subtitle={`${currentEvent.dates.length} dia${currentEvent.dates.length !== 1 ? "s" : ""} possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${currentEvent.startTime} às ${currentEvent.endTime}`} onBack={resetToHome} />
 
-          <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: 18 }}>
-            <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>Para responder, escreve só o teu nome.</p>
+          <div style={{ background: "rgba(15,23,42,0.9)", border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18, boxShadow: "0 18px 44px rgba(0,0,0,0.16)" }}>
+            <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>Para responder ou editar, escreve o teu nome.</p>
             <input autoFocus value={participantName} onChange={(e) => setParticipantName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && startResponse()} placeholder="o teu nome" style={inputStyle} />
-            <button onClick={startResponse} disabled={!participantName.trim()} style={{ ...buttonBase, background: participantName.trim() ? ACCENT : SURFACE, color: participantName.trim() ? "#000" : MUTED2, width: "100%", marginTop: 10 }}>
-              preencher disponibilidade
+            <button onClick={startResponse} disabled={!participantName.trim()} style={{ ...buttonBase, background: participantName.trim() ? ACCENT : SURFACE, color: participantName.trim() ? "#fff" : MUTED2, width: "100%", marginTop: 10 }}>
+              {currentParticipantResponse ? "editar disponibilidade" : "preencher disponibilidade"}
             </button>
           </div>
 
@@ -610,14 +607,44 @@ export default function App() {
 
   // ───────────────────────────────────────────────────────────── FILL
   if (screen === "fill" && currentEvent) {
+    const canSaveResponse = participantName.trim().length > 0;
+    const editingLabel = currentParticipantResponse ? "guardar alterações" : "guardar resposta";
+
     return (
-      <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: isMobile ? "calc(14px + env(safe-area-inset-top)) 10px calc(90px + env(safe-area-inset-bottom))" : "20px 16px", userSelect: "none" }}>
+      <div onMouseUp={() => { dragging.current = false; }} onTouchMove={onTouchMove} style={{ ...BASE, padding: isPhone ? "16px 12px calc(92px + env(safe-area-inset-bottom))" : "20px 16px", userSelect: "none" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <Header title={participantName} subtitle="arrasta para selecionar os slots em que podes" onBack={() => setScreen("event")} right={`${selectedCount} slot${selectedCount !== 1 ? "s" : ""}`} />
+          <Header
+            title={currentEvent.title}
+            subtitle={currentParticipantResponse ? "edita os slots em que podes" : "marca os slots em que podes"}
+            onBack={() => setScreen((currentEvent.responses?.length || 0) > 0 ? "results" : "event")}
+            right={`${selectedCount} slot${selectedCount !== 1 ? "s" : ""}`}
+          />
+
+          <div style={{ background: "rgba(15,23,42,0.9)", border: `1px solid ${BORDER}`, borderRadius: 20, padding: 14, marginBottom: 14, boxShadow: "0 14px 36px rgba(0,0,0,0.14)" }}>
+            <label style={labelStyle}>
+              Nome da tua resposta
+              <input
+                value={participantName}
+                onChange={(e) => setParticipantName(e.target.value)}
+                placeholder="o teu nome"
+                style={{ ...inputStyle, marginTop: 8 }}
+              />
+            </label>
+            <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>
+              Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.
+            </p>
+          </div>
+
           <AvailabilityGrid eventDates={eventDates} slots={slots} availability={availability} onCellDown={onCellDown} onCellEnter={onCellEnter} />
 
-          <div style={{ marginTop: 24, display: "flex", justifyContent: isMobile ? "stretch" : "flex-end" }}>
-            <button onClick={submitResponse} style={{ ...buttonBase, background: ACCENT, color: "#000", paddingInline: 34, width: isMobile ? "100%" : "auto", minHeight: 50 }}>guardar resposta</button>
+          <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", position: isPhone ? "fixed" : "static", left: isPhone ? 12 : "auto", right: isPhone ? 12 : "auto", bottom: isPhone ? "calc(12px + env(safe-area-inset-bottom))" : "auto", zIndex: 20 }}>
+            <button
+              onClick={submitResponse}
+              disabled={!canSaveResponse}
+              style={{ ...buttonBase, background: canSaveResponse ? ACCENT : SURFACE, color: canSaveResponse ? "#fff" : MUTED2, paddingInline: 34, width: isPhone ? "100%" : "auto", boxShadow: isPhone ? "0 14px 30px rgba(0,0,0,0.45)" : "none" }}
+            >
+              {editingLabel}
+            </button>
           </div>
         </div>
       </div>
@@ -629,47 +656,23 @@ export default function App() {
     const max = currentEvent.responses?.length || 1;
 
     return (
-      <div style={{ ...BASE, padding: isMobile ? "calc(14px + env(safe-area-inset-top)) 10px calc(24px + env(safe-area-inset-bottom))" : "20px 16px" }}>
-        <div style={{ maxWidth: selectedSlotDetails && !isMobile ? 1060 : 900, margin: "0 auto" }}>
+      <div style={{ ...BASE, padding: "20px 16px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header title="resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : selectedSlotDetails ? "minmax(0, 1fr) 320px" : "1fr",
-              gap: isMobile ? 12 : 16,
-              alignItems: "start",
-            }}
-          >
-            <Heatmap
-              eventDates={eventDates}
-              slots={slots}
-              max={max}
-              getCount={getCount}
-              getNames={getNames}
-              selectedSlot={selectedResultSlot}
-              onSelectSlot={(dateKey, slot) => setSelectedResultSlot({ dateKey, slotId: slot.id })}
-            />
-
-            <SlotDetailsDrawer
-              slotDetails={selectedSlotDetails}
-              totalResponses={currentEvent.responses?.length || 0}
-              onClose={() => setSelectedResultSlot(null)}
-              isMobile={isMobile}
-            />
-          </div>
+          <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
 
           {bestOptions.length > 0 && (
             <div style={{ marginTop: 26 }}>
               <p style={sectionTitle}>melhores opções</p>
               <div style={{ display: "grid", gap: 8 }}>
                 {bestOptions.map((o) => (
-                  <div key={`${o.dateKey}-${o.slot.id}`} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 14, display: "flex", justifyContent: "space-between", gap: 12 }}>
+                  <div key={`${o.dateKey}-${o.slot.id}`} style={{ background: "rgba(17,24,39,0.92)", border: `1px solid ${BORDER}`, borderRadius: 16, padding: 14, display: "flex", justifyContent: "space-between", gap: 12, boxShadow: "0 14px 32px rgba(0,0,0,0.16)" }}>
                     <div>
                       <strong>{formatDateLong(o.dateKey)} · {o.slot.label}{o.slot.dayOffset ? " +1" : ""}</strong>
                       <div style={{ color: MUTED2, fontSize: 12, marginTop: 4 }}>{o.names.join(", ")}</div>
                     </div>
-                    <div style={{ color: ACCENT, fontWeight: 800 }}>{o.count}</div>
+                    <div style={{ color: "#c4b5fd", fontWeight: 800 }}>{o.count}</div>
                   </div>
                 ))}
               </div>
@@ -688,7 +691,12 @@ export default function App() {
           )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 28 }}>
-            <button onClick={() => setScreen("event")} style={{ ...buttonBase, background: "transparent", color: ACCENT, border: `1.5px solid ${ACCENT}40` }}>+ adicionar resposta</button>
+            {currentParticipantResponse && (
+              <button onClick={editCurrentAvailability} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>
+                editar a minha disponibilidade
+              </button>
+            )}
+            <button onClick={() => { setParticipantName(""); setAvailability({}); setScreen("event"); }} style={{ ...buttonBase, background: "transparent", color: "#c4b5fd", border: `1.5px solid rgba(124,58,237,0.28)` }}>+ adicionar resposta</button>
             <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "copiado" : "copiar link"}</button>
           </div>
         </div>
@@ -700,33 +708,35 @@ export default function App() {
 }
 
 function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPrevious, onNext }) {
-  const isMobile = useIsMobile();
+  const isPhone = useIsPhone();
   const days = getRollingCalendarDays(startDate, 4);
   const visibleLabel = `${MONTHS[startDate.getMonth()].slice(0, 3)} ${startDate.getFullYear()} → ${MONTHS[days[days.length - 1].getMonth()].slice(0, 3)} ${days[days.length - 1].getFullYear()}`;
-  const dayMin = isMobile ? "42px" : "88px";
-  const rowHeight = isMobile ? 64 : 82;
+  const gridColumns = isPhone ? "repeat(7, minmax(38px, 1fr))" : "repeat(7, minmax(88px, 1fr))";
+  const gridMinWidth = isPhone ? "100%" : 680;
+  const dayHeight = isPhone ? 58 : 82;
+  const activeSize = isPhone ? 38 : 48;
 
   return (
-    <div style={{ background: "#fff", color: "#000", borderRadius: isMobile ? 20 : 24, padding: isMobile ? "18px 14px 22px" : "26px 28px 34px", border: "1px solid #eeeeee", boxShadow: "0 18px 50px rgba(0,0,0,0.18)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", gap: 12, marginBottom: isMobile ? 18 : 28 }}>
-        <div>
-          <h3 style={{ margin: 0, fontSize: isMobile ? 18 : 24, fontWeight: 500, letterSpacing: "-0.5px", lineHeight: 1.15 }}>Que dias queres disponibilizar?</h3>
+    <div style={{ background: "rgba(255,255,255,0.96)", color: "#0f172a", borderRadius: isPhone ? 22 : 24, padding: isPhone ? "18px 14px 22px" : "26px 28px 34px", border: "1px solid rgba(255,255,255,0.7)", boxShadow: "0 20px 60px rgba(2,6,23,0.22)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: isPhone ? 18 : 28 }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: isPhone ? 18 : 24, fontWeight: 600, letterSpacing: "-0.5px" }}>Que dias queres disponibilizar?</h3>
           <p style={{ margin: "6px 0 0", color: "#777", fontSize: 12 }}>{visibleLabel}</p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onPrevious} aria-label="Período anterior" style={calendarArrowButton}>‹</button>
-          <button onClick={onNext} aria-label="Próximo período" style={calendarArrowButton}>›</button>
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button onClick={onPrevious} aria-label="Período anterior" style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>‹</button>
+          <button onClick={onNext} aria-label="Próximo período" style={{ ...calendarArrowButton, width: isPhone ? 34 : 42, height: isPhone ? 34 : 42, fontSize: isPhone ? 34 : 44 }}>›</button>
         </div>
       </div>
 
-      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(7, minmax(${dayMin}, 1fr))`, gap: 0, borderBottom: "1px solid #eee", paddingBottom: isMobile ? 12 : 20, minWidth: isMobile ? 0 : 680 }}>
+      <div style={{ overflowX: isPhone ? "hidden" : "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gap: 0, borderBottom: "1px solid #eee", paddingBottom: isPhone ? 12 : 20, minWidth: gridMinWidth }}>
           {["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"].map((d) => (
-            <div key={d} style={{ fontSize: isMobile ? 10 : 13, fontWeight: 500, letterSpacing: "0.2px" }}>{d}</div>
+            <div key={d} style={{ fontSize: isPhone ? 10 : 13, fontWeight: 600, letterSpacing: "0.2px", color: "#777" }}>{d}</div>
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(7, minmax(${dayMin}, 1fr))`, gridAutoRows: rowHeight, minWidth: isMobile ? 0 : 680, paddingTop: isMobile ? 12 : 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: gridColumns, gridAutoRows: dayHeight, minWidth: gridMinWidth, paddingTop: isPhone ? 12 : 18 }}>
           {days.map((date, index) => {
             const key = dateToKey(date);
             const active = !!selectedDates[key];
@@ -746,11 +756,12 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
                   padding: 0,
                   cursor: "pointer",
                   fontFamily: "'Sora', sans-serif",
-                  minHeight: rowHeight,
+                  minHeight: dayHeight,
+                  touchAction: "manipulation",
                 }}
               >
                 {showMonth && (
-                  <span style={{ position: "absolute", top: 0, left: 0, color: "#009e57", fontSize: 12, fontWeight: 500, textTransform: "uppercase" }}>
+                  <span style={{ position: "absolute", top: 0, left: 0, color: ACCENT, fontSize: isPhone ? 9 : 12, fontWeight: 600, textTransform: "uppercase" }}>
                     {MONTHS[date.getMonth()].slice(0, 3)}
                   </span>
                 )}
@@ -758,26 +769,26 @@ function IntegratedCalendarPicker({ startDate, selectedDates, onToggleDate, onPr
                 <span
                   style={{
                     position: "absolute",
-                    top: showMonth ? 30 : 24,
+                    top: showMonth ? (isPhone ? 22 : 30) : (isPhone ? 16 : 24),
                     left: 0,
-                    width: active ? (isMobile ? 36 : 48) : "auto",
-                    height: active ? (isMobile ? 36 : 48) : "auto",
+                    width: active ? activeSize : "auto",
+                    height: active ? activeSize : "auto",
                     borderRadius: active ? "50%" : 0,
-                    background: active ? "#009e57" : "transparent",
+                    background: active ? ACCENT : "transparent",
                     color: active ? "#fff" : "#000",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: 14,
-                    fontWeight: active ? 600 : 400,
-                    boxShadow: active ? "0 8px 18px rgba(0,158,87,0.22)" : "none",
+                    fontSize: isPhone ? 13 : 14,
+                    fontWeight: active ? 700 : 500,
+                    boxShadow: active ? "0 12px 24px rgba(124,58,237,0.22)" : "none",
                   }}
                 >
                   {date.getDate()}
                 </span>
 
                 {!active && isToday && (
-                  <span style={{ position: "absolute", top: showMonth ? 54 : 48, left: 2, width: 5, height: 5, borderRadius: "50%", background: "#009e57" }} />
+                  <span style={{ position: "absolute", top: showMonth ? (isPhone ? 46 : 54) : (isPhone ? 40 : 48), left: 2, width: 5, height: 5, borderRadius: "50%", background: ACCENT }} />
                 )}
               </button>
             );
@@ -792,7 +803,7 @@ function Header({ title, subtitle, onBack, right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <button onClick={onBack} style={{ ...miniButton, width: 36, height: 36, flexShrink: 0 }}>←</button>
+        <button onClick={onBack} style={{ ...miniButton, width: 38, height: 38, flexShrink: 0 }}>←</button>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</h2>
           <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED2 }}>{subtitle}</p>
@@ -803,310 +814,198 @@ function Header({ title, subtitle, onBack, right }) {
   );
 }
 
-function TimeRangeCard({ startTime, endTime, onStartTimeChange, onEndTimeChange, crossesMidnight }) {
-  const isMobile = useIsMobile();
-  const timeInputStyle = {
-    ...inputStyle,
-    marginTop: isMobile ? 8 : 6,
-    minWidth: 0,
-    textAlign: "center",
-    fontSize: isMobile ? 22 : 18,
-    lineHeight: "24px",
-    fontWeight: 800,
-    letterSpacing: "0.2px",
-    padding: isMobile ? "13px 8px" : "14px 12px",
-    borderRadius: isMobile ? 18 : 16,
-    fontVariantNumeric: "tabular-nums",
+function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
+  const isPhone = useIsPhone();
+  const timeWidth = isPhone ? 50 : 58;
+  const columnWidth = isPhone ? 54 : 62;
+  const cellHeight = isPhone ? 28 : 24;
+  const headerHeight = 42;
+
+  return (
+    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 18, border: `1px solid ${BORDER}`, background: SURFACE2 }}>
+      <div style={{ display: "flex", minWidth: "max-content", padding: "10px 10px 12px" }}>
+        <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
+          {slots.map((s) => (
+            <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
+              {s.label}{s.dayOffset ? "+1" : ""}
+            </div>
+          ))}
+        </div>
+
+        {eventDates.map((dateKey, di) => (
+          <div key={dateKey} style={{ flexShrink: 0 }}>
+            <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
+              <strong style={{ fontSize: 12 }}>{formatDateShort(dateKey)}</strong>
+              <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+            </div>
+            {slots.map((s) => {
+              const k = slotKey(dateKey, s.id);
+              const sel = !!availability[k];
+              return (
+                <div
+                  key={s.id}
+                  data-date={dateKey}
+                  data-slot={s.id}
+                  onMouseDown={() => onCellDown(dateKey, s.id)}
+                  onMouseEnter={() => onCellEnter(dateKey, s.id)}
+                  onTouchStart={() => onCellDown(dateKey, s.id)}
+                  style={{
+                    width: columnWidth,
+                    height: cellHeight,
+                    background: sel ? `linear-gradient(180deg, rgba(124,58,237,0.95), rgba(109,40,217,0.95))` : s.isHour ? "#0b1220" : SURFACE,
+                    borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
+                    borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                    cursor: "crosshair",
+                    boxSizing: "border-box",
+                    transition: "background 0.04s, transform 0.04s",
+                    touchAction: "none",
+                  }}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Heatmap({ eventDates, slots, max, getCount, getNames }) {
+  const isPhone = useIsPhone();
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const timeWidth = isPhone ? 50 : 58;
+  const columnWidth = isPhone ? 54 : 62;
+  const cellHeight = isPhone ? 28 : 24;
+  const headerHeight = 42;
+
+  const selectedCount = selectedSlot ? getCount(selectedSlot.dateKey, selectedSlot.slotId) : 0;
+  const selectedNames = selectedSlot ? getNames(selectedSlot.dateKey, selectedSlot.slotId) : [];
+
+  const toggleSlot = (dateKey, slot) => {
+    const sameSlot = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === slot.id;
+    setSelectedSlot(sameSlot ? null : { dateKey, slotId: slot.id, label: slot.label, dayOffset: slot.dayOffset });
   };
 
   return (
-    <div
-      style={{
-        background: SURFACE2,
-        border: `1px solid ${BORDER}`,
-        borderRadius: isMobile ? 22 : 20,
-        padding: isMobile ? "18px 14px 16px" : 16,
-        overflow: "hidden",
-      }}
-    >
-      <p
-        style={{
-          margin: "0 0 14px",
-          color: MUTED2,
-          fontSize: 12,
-          fontWeight: 800,
-          textTransform: "uppercase",
-          letterSpacing: "1px",
-          textAlign: "center",
-        }}
-      >
-        range de horas disponível
-      </p>
+    <div style={{ display: isPhone ? "block" : "grid", gridTemplateColumns: "minmax(0, 1fr) 290px", gap: 16, alignItems: "start" }}>
+      <div>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 18, border: `1px solid ${BORDER}`, background: SURFACE2 }}>
+          <div style={{ display: "flex", minWidth: "max-content", padding: "10px 10px 12px" }}>
+            <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
+              {slots.map((s) => (
+                <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
+                  {s.label}{s.dayOffset ? "+1" : ""}
+                </div>
+              ))}
+            </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-          gap: isMobile ? 8 : 10,
-          alignItems: "end",
-        }}
-      >
-        <label style={{ ...labelStyle, minWidth: 0, display: "block", textAlign: "center", fontSize: isMobile ? 13 : 12 }}>
-          Das
-          <input
-            type="time"
-            step="1800"
-            value={startTime}
-            onChange={(e) => onStartTimeChange(e.target.value)}
-            style={timeInputStyle}
-          />
-        </label>
-
-        <label style={{ ...labelStyle, minWidth: 0, display: "block", textAlign: "center", fontSize: isMobile ? 13 : 12 }}>
-          Até
-          <input
-            type="time"
-            step="1800"
-            value={endTime}
-            onChange={(e) => onEndTimeChange(e.target.value)}
-            style={timeInputStyle}
-          />
-        </label>
-      </div>
-
-      <p
-        style={{
-          margin: "12px auto 0",
-          maxWidth: isMobile ? 290 : "none",
-          color: crossesMidnight ? ACCENT : MUTED2,
-          fontSize: 12,
-          lineHeight: 1.45,
-          textAlign: "center",
-        }}
-      >
-        {crossesMidnight
-          ? "Este range passa da meia-noite. Ex.: 21:30 → 04:00."
-          : "Os participantes só poderão escolher slots dentro deste intervalo."}
-      </p>
-    </div>
-  );
-}
-
-function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
-  const isMobile = useIsMobile();
-  const dayWidth = isMobile ? (eventDates.length <= 2 ? 96 : eventDates.length === 3 ? 76 : 58) : 62;
-  const timeWidth = isMobile ? 52 : 58;
-  const cellHeight = isMobile
-    ? `clamp(18px, calc((100svh - 330px) / ${Math.max(slots.length, 1)}), 28px)`
-    : 24;
-
-  return (
-    <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: isMobile ? "12px 8px 14px" : 14, overflow: "hidden" }}>
-      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "flex", width: "max-content", minWidth: "max-content", margin: isMobile ? "0 auto" : 0 }}>
-          <div style={{ flexShrink: 0, paddingTop: 42 }}>
-            {slots.map((s) => (
-              <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: isMobile ? 11 : 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 700, paddingRight: 8, boxSizing: "border-box" }}>
-                {s.label}{s.dayOffset ? "+1" : ""}
+            {eventDates.map((dateKey, di) => (
+              <div key={dateKey} style={{ flexShrink: 0 }}>
+                <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
+                  <strong style={{ fontSize: 12 }}>{formatDateShort(dateKey)}</strong>
+                  <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+                </div>
+                {slots.map((s) => {
+                  const count = getCount(dateKey, s.id);
+                  const intensity = count / max;
+                  const bg = count === 0 ? (s.isHour ? "#0c0c0c" : SURFACE) : `rgba(124, 58, 237, ${0.14 + intensity * 0.78})`;
+                  const names = getNames(dateKey, s.id).join(", ");
+                  const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => toggleSlot(dateKey, s)}
+                      title={`${formatDateLong(dateKey)} ${s.label}${s.dayOffset ? " +1" : ""}: ${count}/${max}${names ? ` · ${names}` : ""}`}
+                      style={{
+                        width: columnWidth,
+                        height: cellHeight,
+                        background: bg,
+                        border: "none",
+                        borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
+                        borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                        boxSizing: "border-box",
+                        color: TEXT,
+                        fontSize: 10,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        outline: isSelected ? `2px solid ${ACCENT}` : "none",
+                        outlineOffset: isSelected ? -2 : 0,
+                        boxShadow: isSelected ? `inset 0 0 0 2px #000, 0 0 0 2px ${ACCENT}66` : "none",
+                        transform: isSelected ? "scale(1.02)" : "scale(1)",
+                        position: "relative",
+                        zIndex: isSelected ? 2 : 1,
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      {count > 0 ? count : ""}
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
+        </div>
 
-          {eventDates.map((dateKey, di) => (
-            <div key={dateKey} style={{ flexShrink: 0 }}>
-              <div style={{ height: 42, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: dayWidth }}>
-                <strong style={{ fontSize: 13 }}>{formatDateShort(dateKey)}</strong>
-                <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
-              </div>
-              {slots.map((s) => {
-                const k = slotKey(dateKey, s.id);
-                const sel = !!availability[k];
-                return (
-                  <div
-                    key={s.id}
-                    data-date={dateKey}
-                    data-slot={s.id}
-                    onMouseDown={() => onCellDown(dateKey, s.id)}
-                    onMouseEnter={() => onCellEnter(dateKey, s.id)}
-                    onTouchStart={() => onCellDown(dateKey, s.id)}
-                    style={{
-                      width: dayWidth,
-                      height: cellHeight,
-                      background: sel ? ACCENT : s.isHour ? "#0c0c0c" : SURFACE,
-                      borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
-                      borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
-                      cursor: "crosshair",
-                      boxSizing: "border-box",
-                      transition: "background 0.04s",
-                      touchAction: "none",
-                    }}
-                  />
-                );
-              })}
-            </div>
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: MUTED2 }}>
+          <span>0</span>
+          {[0.1, 0.3, 0.5, 0.7, 0.85, 1].map((v, i) => (
+            <div key={i} style={{ width: 18, height: 10, borderRadius: 3, background: `rgba(124, 58, 237, ${0.14 + v * 0.78})` }} />
           ))}
+          <span>{max}</span>
         </div>
       </div>
+
+      {(selectedSlot || !isPhone) && (
+        <SlotPeoplePanel
+          selectedSlot={selectedSlot}
+          selectedCount={selectedCount}
+          selectedNames={selectedNames}
+          onClose={() => setSelectedSlot(null)}
+          isPhone={isPhone}
+        />
+      )}
     </div>
   );
 }
 
-function Heatmap({ eventDates, slots, max, getCount, getNames, selectedSlot, onSelectSlot }) {
-  const isMobile = useIsMobile();
-  const dayWidth = isMobile ? (eventDates.length <= 2 ? 96 : eventDates.length === 3 ? 76 : 58) : 62;
-  const timeWidth = isMobile ? 52 : 58;
-  const cellHeight = isMobile
-    ? `clamp(15px, calc((100svh - 300px) / ${Math.max(slots.length, 1)}), 24px)`
-    : 24;
+function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, isPhone }) {
+  if (!selectedSlot) {
+    return (
+      <aside style={{ background: "rgba(15,23,42,0.92)", border: `1px solid ${BORDER}`, borderRadius: 20, padding: 16, color: MUTED2, fontSize: 13, position: "sticky", top: 16, boxShadow: "0 18px 42px rgba(0,0,0,0.22)" }}>
+        Carrega num slot do heatmap para veres quem está disponível.
+      </aside>
+    );
+  }
 
   return (
-    <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 22, padding: isMobile ? "12px 8px 14px" : 14, overflow: "hidden" }}>
-      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "flex", width: "max-content", minWidth: "max-content", margin: isMobile ? "0 auto" : 0 }}>
-          <div style={{ flexShrink: 0, paddingTop: 42 }}>
-            {slots.map((s) => (
-              <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: isMobile ? 11 : 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 700, paddingRight: 8, boxSizing: "border-box" }}>
-                {s.label}{s.dayOffset ? "+1" : ""}
-              </div>
-            ))}
-          </div>
-
-          {eventDates.map((dateKey, di) => (
-            <div key={dateKey} style={{ flexShrink: 0 }}>
-              <div style={{ height: 42, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: dayWidth }}>
-                <strong style={{ fontSize: 13 }}>{formatDateShort(dateKey)}</strong>
-                <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
-              </div>
-              {slots.map((s) => {
-                const count = getCount(dateKey, s.id);
-                const intensity = count / max;
-                const bg = count === 0 ? (s.isHour ? "#0c0c0c" : SURFACE) : `rgba(201, 240, 0, ${0.12 + intensity * 0.88})`;
-                const names = getNames(dateKey, s.id).join(", ");
-                const selected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
-                return (
-                  <div
-                    key={s.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectSlot?.(dateKey, s)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") onSelectSlot?.(dateKey, s);
-                    }}
-                    title={`${formatDateLong(dateKey)} ${s.label}${s.dayOffset ? " +1" : ""}: ${count}/${max}${names ? ` · ${names}` : ""}`}
-                    style={{
-                      width: dayWidth,
-                      height: cellHeight,
-                      background: bg,
-                      borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
-                      borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
-                      boxSizing: "border-box",
-                      color: count > 0 && intensity > 0.55 ? "#000" : TEXT,
-                      fontSize: isMobile ? 11 : 10,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      outline: selected ? `2px solid ${ACCENT}` : "none",
-                      outlineOffset: -2,
-                      boxShadow: selected ? "inset 0 0 0 1px #000" : "none",
-                      touchAction: "manipulation",
-                    }}
-                  >
-                    {count > 0 ? count : ""}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", gap: 5, fontSize: 11, color: MUTED2 }}>
-        <span>0</span>
-        {[0.1, 0.3, 0.5, 0.7, 0.85, 1].map((v, i) => (
-          <div key={i} style={{ width: 18, height: 10, borderRadius: 3, background: `rgba(201, 240, 0, ${0.12 + v * 0.88})` }} />
-        ))}
-        <span>{max}</span>
-      </div>
-    </div>
-  );
-}
-
-function SlotDetailsDrawer({ slotDetails, totalResponses, onClose, isMobile }) {
-  if (!slotDetails) return null;
-
-  const hasNames = slotDetails.names.length > 0;
-  const time = `${slotDetails.slot.label}${slotDetails.slot.dayOffset ? " +1" : ""}`;
-  const panelStyle = isMobile
-    ? {
-        background: SURFACE2,
-        border: `1px solid ${BORDER}`,
-        borderRadius: 22,
-        padding: 16,
-        boxShadow: "0 12px 35px rgba(0,0,0,0.22)",
-        overflowY: "auto",
-      }
-    : {
-        position: "sticky",
-        top: 20,
-        width: "100%",
-        boxSizing: "border-box",
-        background: SURFACE2,
-        border: `1px solid ${BORDER}`,
-        borderRadius: 22,
-        padding: 18,
-        boxShadow: "0 18px 55px rgba(0,0,0,0.28)",
-        maxHeight: "calc(100svh - 40px)",
-        overflowY: "auto",
-      };
-
-  return (
-    <aside style={panelStyle} aria-live="polite">
+    <aside style={{ background: "rgba(15,23,42,0.98)", border: `1px solid rgba(124,58,237,0.34)`, borderRadius: 20, padding: 16, marginTop: isPhone ? 14 : 0, position: isPhone ? "static" : "sticky", top: 16, boxShadow: "0 22px 54px rgba(0,0,0,0.26)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div>
-          <p style={{ margin: "0 0 6px", color: ACCENT, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.7px" }}>
-            slot selecionado
-          </p>
-          <h3 style={{ margin: 0, fontSize: 20, lineHeight: 1.2 }}>
-            {formatDateLong(slotDetails.dateKey)}
-          </h3>
-          <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>{time}</p>
+          <p style={{ ...sectionTitle, marginBottom: 6 }}>disponíveis neste slot</p>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{formatDateLong(selectedSlot.dateKey)} · {selectedSlot.label}{selectedSlot.dayOffset ? " +1" : ""}</h3>
+          <p style={{ margin: "6px 0 0", color: ACCENT, fontSize: 13, fontWeight: 800 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
         </div>
-        <button onClick={onClose} aria-label="Fechar" style={{ ...miniButton, width: 36, height: 36 }}>×</button>
+        <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
 
-      <div style={{ marginTop: 16, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <strong style={{ color: ACCENT, fontSize: 32, lineHeight: 1 }}>{slotDetails.count}</strong>
-          <span style={{ color: MUTED2, fontSize: 13 }}>/ {totalResponses} disponíveis</span>
+      {selectedNames.length > 0 ? (
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          {selectedNames.map((name) => (
+            <div key={name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>
+              {name}
+            </div>
+          ))}
         </div>
-      </div>
-
-      <div style={{ marginTop: 18 }}>
-        <p style={sectionTitle}>pessoas disponíveis</p>
-        {hasNames ? (
-          <div style={{ display: "grid", gap: 8 }}>
-            {slotDetails.names.map((name) => (
-              <div key={name} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: "12px 13px", fontSize: 14, fontWeight: 650 }}>
-                {name}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 14, color: MUTED2, fontSize: 13 }}>
-            Ninguém está disponível neste slot.
-          </div>
-        )}
-      </div>
-
-      <p style={{ margin: "16px 0 0", color: MUTED2, fontSize: 11 }}>
-        Toca noutro quadrado do heatmap para mudar o slot.
-      </p>
+      ) : (
+        <p style={{ margin: "14px 0 0", color: MUTED2, fontSize: 13 }}>Ainda ninguém marcou este horário.</p>
+      )}
     </aside>
   );
 }
-
 const calendarArrowButton = {
   background: "transparent",
   border: "none",
@@ -1131,7 +1030,7 @@ const miniButton = {
   width: 34,
   height: 34,
   borderRadius: 10,
-  fontSize: 15,
+  fontSize: 16,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
