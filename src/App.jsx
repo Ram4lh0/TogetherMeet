@@ -1541,117 +1541,169 @@ ${currentEvent.id}`;
   }
 
   // ─────────────────────────────────────────────────────────────── EVENT LANDING
-  if (screen === "event" && currentEvent) {
-    return withTheme(
+  if (screen === "created" && currentEvent) {
+  return withTheme(
+    <div
+      style={{
+        ...BASE,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
       <div
         style={{
-          ...BASE,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 24,
+          width: "100%",
+          maxWidth: 520,
+          background: SURFACE2,
+          border: `1px solid ${BORDER}`,
+          borderRadius: 28,
+          padding: 22,
         }}
       >
-        <div style={{ width: "100%", maxWidth: 460 }}>
-          <Header
-            title={currentEvent.title}
-            subtitle={`${currentEvent.dates.length} dia${
-              currentEvent.dates.length !== 1 ? "s" : ""
-            } possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${
-              currentEvent.startTime
-            } às ${currentEvent.endTime}`}
-            onBack={resetToHome}
-          />
+        <p
+          style={{
+            margin: 0,
+            color: ACCENT,
+            fontSize: 12,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.7px",
+          }}
+        >
+          Evento Criado
+        </p>
 
-          {(currentEvent.responses?.length || 0) === 0 && currentEvent.creatorName ? (
-            <div
+        <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>
+          {currentEvent.title}
+        </h1>
+
+        <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>
+          Partilha o link ou o código com quem queres convidar.
+        </p>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <div>
+            <p
               style={{
-                background: SURFACE2,
-                border: `1px solid ${BORDER}`,
-                borderRadius: 24,
-                padding: 18,
+                margin: "0 0 6px",
+                color: MUTED2,
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
               }}
             >
-              <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 12 }}>
-                Primeira resposta
-              </p>
+              Link do Evento
+            </p>
 
-              <h3 style={{ margin: "0 0 12px", fontSize: 18 }}>
-                Criador: {currentEvent.creatorName}
-              </h3>
-
-              <button
-                onClick={startCreatorResponse}
-                style={{
-                  ...buttonBase,
-                  background: ACCENT,
-                  color: "#fff",
-                  width: "100%",
-                }}
-              >
-                Preencher Disponibilidade
-              </button>
-            </div>
-          ) : (
             <div
               style={{
-                background: SURFACE2,
+                background: SURFACE,
                 border: `1px solid ${BORDER}`,
-                borderRadius: 24,
-                padding: 18,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 12,
+                color: MUTED2,
+                wordBreak: "break-all",
               }}
             >
-              <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>
-                Para responder ou editar, escreve o teu nome.
-              </p>
-
-              <input
-                autoFocus
-                value={participantName}
-                onChange={(e) => setParticipantName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && startResponse()}
-                placeholder="O teu nome"
-                style={inputStyle}
-              />
-
-              <button
-                onClick={startResponse}
-                disabled={!participantName.trim()}
-                style={{
-                  ...buttonBase,
-                  background: participantName.trim() ? ACCENT : SURFACE,
-                  color: participantName.trim() ? "#fff" : MUTED2,
-                  width: "100%",
-                  marginTop: 10,
-                }}
-              >
-                {currentParticipantResponse
-                  ? "Editar Disponibilidade"
-                  : "Preencher Disponibilidade"}
-              </button>
+              {eventLink}
             </div>
-          )}
+          </div>
+
+          <div>
+            <p
+              style={{
+                margin: "0 0 6px",
+                color: MUTED2,
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
+              }}
+            >
+              Código do Evento
+            </p>
+
+            <div
+              style={{
+                background: SURFACE,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 16,
+                color: TEXT,
+                fontWeight: 900,
+                letterSpacing: "0.5px",
+                wordBreak: "break-all",
+              }}
+            >
+              {currentEvent.id}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+          <button
+            onClick={startCreatorResponse}
+            style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
+          >
+            Preencher Disponibilidade
+          </button>
 
           <button
-            onClick={() => setScreen("results")}
+            onClick={shareWhatsApp}
             style={{
-              marginTop: 16,
-              background: "transparent",
-              color: MUTED2,
-              border: "none",
-              cursor: "pointer",
-              fontFamily: "'Sora', sans-serif",
-              width: "100%",
+              ...buttonBase,
+              background: "#25D366",
+              color: "#fff",
             }}
           >
-            Ver Resultados · {currentEvent.responses?.length || 0} resposta
-            {(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}
+            Partilhar WhatsApp
+          </button>
+
+          <button
+            onClick={() => setScreen("event")}
+            style={{
+              ...buttonBase,
+              background: SURFACE,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            Abrir Evento
+          </button>
+
+          <button
+            onClick={copyLink}
+            style={{
+              ...buttonBase,
+              background: SURFACE,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {copied ? "Link Copiado" : "Copiar Link"}
+          </button>
+
+          <button
+            onClick={copyEventCode}
+            style={{
+              ...buttonBase,
+              background: SURFACE,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {copiedCode ? "Código Copiado" : "Copiar Código"}
           </button>
         </div>
       </div>
-    );
-  }
-
+    </div>
+  );
+}
   // ─────────────────────────────────────────────────────────────── FILL
   if (screen === "fill" && currentEvent) {
     const canSaveResponse = participantName.trim().length > 0;
