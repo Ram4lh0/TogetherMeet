@@ -1094,7 +1094,7 @@ function ThemeToggle({ mode, onToggle }) {
       }}
     >
       <span aria-hidden="true" style={{ fontSize: 16 }}>{theme.icon}</span>
-      <span>{mode === "dark" ? "" : ""}</span>
+      <span>{mode === "dark" ? "Modo Claro" : "Dark Mode"}</span>
     </button>
   );
 }
