@@ -1361,156 +1361,157 @@ export default function App() {
 
   // ─────────────────────────────────────────────────────────────── CREATED
   if (screen === "created" && currentEvent) {
-    return withTheme(
+  return withTheme(
+    <div
+      style={{
+        ...BASE,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
       <div
         style={{
-          ...BASE,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 24,
+          width: "100%",
+          maxWidth: 520,
+          background: SURFACE2,
+          border: `1px solid ${BORDER}`,
+          borderRadius: 28,
+          padding: 22,
         }}
       >
-        <div
+        <p
           style={{
-            width: "100%",
-            maxWidth: 520,
-            background: SURFACE2,
-            border: `1px solid ${BORDER}`,
-            borderRadius: 28,
-            padding: 22,
+            margin: 0,
+            color: ACCENT,
+            fontSize: 12,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.7px",
           }}
         >
-          <p
-            style={{
-              margin: 0,
-              color: ACCENT,
-              fontSize: 12,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.7px",
-            }}
-          >
-            Evento Criado
-          </p>
+          Evento Criado
+        </p>
 
-          <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
+        <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>
+          {currentEvent.title}
+        </h1>
 
-          <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>
-            Partilha o link ou o código com quem queres convidar.
-          </p>
+        <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>
+          Partilha o link ou o código com quem queres convidar.
+        </p>
 
-          <div style={{ display: "grid", gap: 10 }}>
-            <div>
-              <p
-                style={{
-                  margin: "0 0 6px",
-                  color: MUTED2,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.7px",
-                }}
-              >
-                Link do Evento
-              </p>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div>
+            <p
+              style={{
+                margin: "0 0 6px",
+                color: MUTED2,
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
+              }}
+            >
+              Link do Evento
+            </p>
 
-              <div
-                style={{
-                  background: SURFACE,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 18,
-                  padding: 14,
-                  fontSize: 12,
-                  color: MUTED2,
-                  wordBreak: "break-all",
-                }}
-              >
-                {eventLink}
-              </div>
-            </div>
-
-            <div>
-              <p
-                style={{
-                  margin: "0 0 6px",
-                  color: MUTED2,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.7px",
-                }}
-              >
-                Código do Evento
-              </p>
-
-              <div
-                style={{
-                  background: SURFACE,
-                  border: `1px solid ${BORDER}`,
-                  borderRadius: 18,
-                  padding: 14,
-                  fontSize: 16,
-                  color: TEXT,
-                  fontWeight: 900,
-                  letterSpacing: "0.5px",
-                  wordBreak: "break-all",
-                }}
-              >
-                {currentEvent.id}
-              </div>
+            <div
+              style={{
+                background: SURFACE,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 12,
+                color: MUTED2,
+                wordBreak: "break-all",
+              }}
+            >
+              {eventLink}
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-            <button
-              onClick={startCreatorResponse}
-              style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
-            >
-              Preencher Disponibilidade
-            </button>
-
-            <button
-              onClick={copyLink}
+          <div>
+            <p
               style={{
-                ...buttonBase,
-                background: SURFACE,
-                color: TEXT,
-                border: `1px solid ${BORDER}`,
+                margin: "0 0 6px",
+                color: MUTED2,
+                fontSize: 11,
+                fontWeight: 800,
+                textTransform: "uppercase",
+                letterSpacing: "0.7px",
               }}
             >
-              {copied ? "Link Copiado" : "Copiar Link"}
-            </button>
+              Código do Evento
+            </p>
 
-            <button
-              onClick={copyEventCode}
+            <div
               style={{
-                ...buttonBase,
                 background: SURFACE,
-                color: TEXT,
                 border: `1px solid ${BORDER}`,
+                borderRadius: 18,
+                padding: 14,
+                fontSize: 16,
+                color: TEXT,
+                fontWeight: 900,
+                letterSpacing: "0.5px",
+                wordBreak: "break-all",
               }}
             >
-              {copiedCode ? "Código Copiado" : "Copiar Código"}
-            </button>
-
-            <button
-              onClick={() => setScreen("event")}
-              style={{
-                ...buttonBase,
-                background: SURFACE,
-                color: TEXT,
-                border: `1px solid ${BORDER}`,
-              }}
-            >
-              Abrir Evento
-            </button>
+              {currentEvent.id}
+            </div>
           </div>
         </div>
-      </div>
-    );
-  }
 
+        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+          <button
+            onClick={startCreatorResponse}
+            style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
+          >
+            Preencher Disponibilidade
+          </button>
+
+          <button
+            onClick={() => setScreen("event")}
+            style={{
+              ...buttonBase,
+              background: SURFACE,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            Abrir Evento
+          </button>
+
+          <button
+            onClick={copyLink}
+            style={{
+              ...buttonBase,
+              background: SURFACE,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {copied ? "Link Copiado" : "Copiar Link"}
+          </button>
+
+          <button
+            onClick={copyEventCode}
+            style={{
+              ...buttonBase,
+              background: SURFACE,
+              color: TEXT,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {copiedCode ? "Código Copiado" : "Copiar Código"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
   // ─────────────────────────────────────────────────────────────── EVENT LANDING
   if (screen === "event" && currentEvent) {
     return withTheme(
