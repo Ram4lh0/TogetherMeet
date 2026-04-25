@@ -1146,7 +1146,7 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
         <div>
           <p style={{ ...sectionTitle, marginBottom: 6 }}>disponíveis neste slot</p>
           <h3 style={{ margin: 0, fontSize: 16 }}>{formatDateLong(selectedSlot.dateKey)} · {selectedSlot.label}{selectedSlot.dayOffset ? " +1" : ""}</h3>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
+          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
