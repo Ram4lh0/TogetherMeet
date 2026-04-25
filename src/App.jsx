@@ -22,7 +22,7 @@ if (typeof document !== "undefined") {
     const style = document.createElement("style");
     style.id = "pelada-mobile-style";
     style.textContent = `
-      html, body, #root { min-height: 100%; margin: 0; background: #f6fbf3; }
+      html, body, #root { min-height: 100dvh; margin: 0; background: #f6fbf3; }
       * { -webkit-tap-highlight-color: transparent; }
       button, input { font: inherit; }
     `;
@@ -63,7 +63,7 @@ const MONTHS = [
 const BASE = {
   fontFamily: "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   background: "linear-gradient(180deg, #fbfef8 0%, #eef8ec 100%)",
-  minHeight: "100vh",
+  minHeight: "100dvh",
   color: TEXT,
 };
 
@@ -152,6 +152,14 @@ function timeLabel(totalMinutes) {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
+function normalizeName(name) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function generateSlots(startTime, endTime) {
   const start = parseTime(startTime);
   let end = parseTime(endTime);
@@ -160,7 +168,7 @@ function generateSlots(startTime, endTime) {
   if (end <= start) end += 1440;
 
   const slots = [];
-  for (let m = start; m <= end; m += 30) {
+  for (let m = start; m < end; m += 30) {
     slots.push({
       id: String(m),
       label: timeLabel(m),
@@ -219,6 +227,26 @@ function useIsPhone() {
   }, []);
 
   return isPhone;
+}
+
+function useViewportSize() {
+  const [size, setSize] = useState(() => {
+    if (typeof window === "undefined") return { width: 390, height: 844 };
+    return { width: window.innerWidth, height: window.innerHeight };
+  });
+
+  useEffect(() => {
+    const onResize = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    onResize();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
+
+  return size;
 }
 export default function App() {
   const [events, setEvents] = useState({});
@@ -335,7 +363,7 @@ export default function App() {
     setAvailability({});
     window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
     setCreateStep("title");
-    setScreen("fill");
+    setScreen("created");
   };
 
   const startResponse = () => {
@@ -343,7 +371,7 @@ export default function App() {
     if (!name || !currentEvent) return;
 
     const existing = currentEvent.responses?.find(
-      (r) => r.name.trim().toLowerCase() === name.toLowerCase()
+      (r) => normalizeName(r.name) === normalizeName(name)
     );
     setAvailability(existing?.availability || {});
     setScreen("fill");
@@ -384,8 +412,8 @@ export default function App() {
       const ev = prev[currentEvent.id];
       const responses = ev.responses || [];
       const nextResponses = [
-        ...responses.filter((r) => r.name.trim().toLowerCase() !== name.toLowerCase()),
-        { name, availability: cleanAvailability, updatedAt: new Date().toISOString() },
+        ...responses.filter((r) => normalizeName(r.name) !== normalizeName(name)),
+        { name, nameKey: normalizeName(name), availability: cleanAvailability, updatedAt: new Date().toISOString() },
       ];
       return { ...prev, [ev.id]: { ...ev, responses: nextResponses } };
     });
@@ -407,9 +435,9 @@ export default function App() {
 
 
   const currentParticipantResponse = useMemo(() => {
-    const name = participantName.trim().toLowerCase();
+    const name = normalizeName(participantName);
     if (!currentEvent || !name) return null;
-    return (currentEvent.responses || []).find((r) => r.name.trim().toLowerCase() === name) || null;
+    return (currentEvent.responses || []).find((r) => normalizeName(r.name) === name) || null;
   }, [currentEvent, participantName]);
 
   const editCurrentAvailability = () => {
@@ -521,7 +549,7 @@ export default function App() {
 
     if (createStep === "title") {
       return (
-        <div style={{ ...BASE, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 18px" }}>
+        <div style={{ ...BASE, minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 18px" }}>
           <div style={{ width: "100%", maxWidth: 430 }}>
             <button onClick={resetToHome} style={{ ...miniButton, marginBottom: 18 }}>←</button>
 
@@ -535,7 +563,7 @@ export default function App() {
               </p>
 
               <h1 style={{ margin: "0 0 10px", fontSize: 31, lineHeight: 1.04, letterSpacing: "-1.2px" }}>
-                Qual vai ser o nome do evento?
+                Como se chama?
               </h1>
 
               <p style={{ margin: "0 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>
@@ -803,24 +831,9 @@ export default function App() {
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <Header title="resultados" subtitle={currentEvent.title} onBack={() => setScreen("event")} right={`${currentEvent.responses?.length || 0} resposta${(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}`} />
 
-          <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
+          <BestOptionsList bestOptions={bestOptions} />
 
-          {bestOptions.length > 0 && (
-            <div style={{ marginTop: 26 }}>
-              <p style={sectionTitle}>melhores opções</p>
-              <div style={{ display: "grid", gap: 8 }}>
-                {bestOptions.map((o) => (
-                  <div key={`${o.dateKey}-${o.slot.id}`} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 14, display: "flex", justifyContent: "space-between", gap: 12 }}>
-                    <div>
-                      <strong>{formatDateLong(o.dateKey)} · {o.slot.label}{o.slot.dayOffset ? " +1" : ""}</strong>
-                      <div style={{ color: MUTED2, fontSize: 12, marginTop: 4 }}>{o.names.join(", ")}</div>
-                    </div>
-                    <div style={{ color: ACCENT, fontWeight: 800 }}>{o.count}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <Heatmap eventDates={eventDates} slots={slots} max={max} getCount={getCount} getNames={getNames} />
 
           {(currentEvent.responses?.length || 0) > 0 && (
             <div style={{ marginTop: 26 }}>
@@ -957,70 +970,132 @@ function Header({ title, subtitle, onBack, right }) {
   );
 }
 
-function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
+function BestOptionsList({ bestOptions }) {
   const isPhone = useIsPhone();
-  const timeWidth = isPhone ? 50 : 58;
-  const columnWidth = isPhone ? 54 : 62;
-  const cellHeight = isPhone ? 28 : 24;
-  const headerHeight = 42;
+
+  if (!bestOptions.length) {
+    return (
+      <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 14, color: MUTED2, fontSize: 13, marginBottom: isPhone ? 12 : 16 }}>
+        Ainda não há opções suficientes. Assim que alguém responder, as melhores horas aparecem aqui.
+      </div>
+    );
+  }
 
   return (
-    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 18, border: `1px solid ${BORDER}`, background: SURFACE2 }}>
-      <div style={{ display: "flex", minWidth: "max-content", padding: "10px 10px 12px" }}>
-        <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
-          {slots.map((s) => (
-            <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 8, boxSizing: "border-box" }}>
-              {s.label}{s.dayOffset ? "+1" : ""}
+    <div style={{ marginBottom: isPhone ? 12 : 16 }}>
+      <p style={sectionTitle}>melhores opções</p>
+      <div style={{ display: "grid", gap: 8 }}>
+        {bestOptions.map((o, index) => (
+          <div
+            key={`${o.dateKey}-${o.slot.id}`}
+            style={{
+              background: SURFACE,
+              border: `1px solid ${index === 0 ? ACCENT : BORDER}` ,
+              borderRadius: 18,
+              padding: isPhone ? 12 : 14,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <strong style={{ display: "block", fontSize: isPhone ? 13 : 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {index + 1}. {formatDateLong(o.dateKey)} · {o.slot.label}{o.slot.dayOffset ? " +1" : ""}
+              </strong>
+              <div style={{ color: MUTED2, fontSize: 12, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {o.names.join(", ")}
+              </div>
             </div>
-          ))}
-        </div>
-
-        {eventDates.map((dateKey, di) => (
-          <div key={dateKey} style={{ flexShrink: 0 }}>
-            <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
-              <strong style={{ fontSize: 12 }}>{formatDateShort(dateKey)}</strong>
-              <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+            <div style={{ color: ACCENT_DARK, fontWeight: 900, background: ACCENT_SOFT, borderRadius: 999, padding: "7px 10px", fontSize: 13, flexShrink: 0 }}>
+              {o.count}
             </div>
-            {slots.map((s) => {
-              const k = slotKey(dateKey, s.id);
-              const sel = !!availability[k];
-              return (
-                <div
-                  key={s.id}
-                  data-date={dateKey}
-                  data-slot={s.id}
-                  onMouseDown={() => onCellDown(dateKey, s.id)}
-                  onMouseEnter={() => onCellEnter(dateKey, s.id)}
-                  onTouchStart={() => onCellDown(dateKey, s.id)}
-                  style={{
-                    width: columnWidth,
-                    height: cellHeight,
-                    background: sel ? ACCENT : s.isHour ? "#f3f8ef" : "#fbfdf9",
-                    borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
-                    borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
-                    cursor: "pointer",
-                    boxSizing: "border-box",
-                    transition: "background 0.04s, transform 0.04s",
-                    touchAction: "none",
-                  }}
-                />
-              );
-            })}
           </div>
         ))}
       </div>
     </div>
   );
 }
+function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellEnter }) {
+  const isPhone = useIsPhone();
+  const viewport = useViewportSize();
+  const visibleColumns = Math.min(eventDates.length || 1, 5);
+  const timeWidth = isPhone ? 42 : 58;
+  const columnWidth = isPhone
+    ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56)
+    : 62;
+  const fillAvailableHeight = Math.max(360, viewport.height - 350);
+  const cellHeight = isPhone
+    ? clamp(Math.floor(fillAvailableHeight / Math.max(slots.length, 1)), 20, 28)
+    : 24;
+  const headerHeight = isPhone ? 38 : 42;
 
+  return (
+    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 18, border: `1px solid ${BORDER}`, background: SURFACE2 }}>
+      <div style={{ display: "flex", justifyContent: "center", minWidth: "100%", padding: isPhone ? "8px 8px 10px" : "10px 10px 12px" }}>
+        <div style={{ display: "flex", width: "max-content" }}>
+          <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
+            {slots.map((s) => (
+              <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: isPhone ? 9 : 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 600, paddingRight: 6, boxSizing: "border-box" }}>
+                {s.label}{s.dayOffset ? "+1" : ""}
+              </div>
+            ))}
+          </div>
+
+          {eventDates.map((dateKey, di) => (
+            <div key={dateKey} style={{ flexShrink: 0 }}>
+              <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
+                <strong style={{ fontSize: isPhone ? 11 : 12 }}>{formatDateShort(dateKey)}</strong>
+                <span style={{ color: MUTED2, fontSize: isPhone ? 9 : 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+              </div>
+              {slots.map((s) => {
+                const k = slotKey(dateKey, s.id);
+                const sel = !!availability[k];
+                return (
+                  <div
+                    key={s.id}
+                    data-date={dateKey}
+                    data-slot={s.id}
+                    onMouseDown={() => onCellDown(dateKey, s.id)}
+                    onMouseEnter={() => onCellEnter(dateKey, s.id)}
+                    onTouchStart={() => onCellDown(dateKey, s.id)}
+                    style={{
+                      width: columnWidth,
+                      height: cellHeight,
+                      background: sel ? ACCENT : s.isHour ? "#f3f8ef" : "#fbfdf9",
+                      borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
+                      borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                      transition: "background 0.04s, transform 0.04s",
+                      touchAction: "none",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   const isPhone = useIsPhone();
+  const viewport = useViewportSize();
   const [selectedSlot, setSelectedSlot] = useState(null);
   const peoplePanelRef = useRef(null);
-  const timeWidth = isPhone ? 50 : 58;
-  const columnWidth = isPhone ? 54 : 62;
-  const cellHeight = isPhone ? 28 : 24;
-  const headerHeight = 42;
+  const visibleColumns = Math.min(eventDates.length || 1, 5);
+  const timeWidth = isPhone ? 42 : 58;
+  const columnWidth = isPhone
+    ? clamp(Math.floor((viewport.width - 92) / visibleColumns), 42, 56)
+    : 62;
+  const heatmapAvailableHeight = Math.max(300, viewport.height - 360);
+  const cellHeight = isPhone
+    ? clamp(Math.floor(heatmapAvailableHeight / Math.max(slots.length, 1)), 14, 24)
+    : 24;
+  const headerHeight = isPhone ? 36 : 42;
 
   const selectedCount = selectedSlot ? getCount(selectedSlot.dateKey, selectedSlot.slotId) : 0;
   const selectedNames = selectedSlot ? getNames(selectedSlot.dateKey, selectedSlot.slotId) : [];
@@ -1042,75 +1117,77 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   };
 
   return (
-    <div style={{ display: isPhone ? "block" : "grid", gridTemplateColumns: "minmax(0, 1fr) 290px", gap: 16, alignItems: "start" }}>
+    <div style={{ display: isPhone ? "block" : "grid", gridTemplateColumns: "minmax(0, 1fr) 290px", gap: 16, alignItems: "start", marginTop: isPhone ? 14 : 18 }}>
       <div>
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", borderRadius: 24, border: `1px solid ${BORDER}`, background: SURFACE2, boxShadow: "0 16px 42px rgba(15,23,42,0.06)" }}>
-          <div style={{ display: "flex", minWidth: "max-content", padding: "10px 10px 12px" }}>
-            <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
-              {slots.map((s) => (
-                <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 700, paddingRight: 8, boxSizing: "border-box" }}>
-                  {s.label}{s.dayOffset ? "+1" : ""}
+          <div style={{ display: "flex", justifyContent: "center", minWidth: "100%", padding: isPhone ? "8px 8px 10px" : "10px 10px 12px" }}>
+            <div style={{ display: "flex", width: "max-content" }}>
+              <div style={{ flexShrink: 0, paddingTop: headerHeight }}>
+                {slots.map((s) => (
+                  <div key={s.id} style={{ height: cellHeight, width: timeWidth, display: "flex", alignItems: "center", fontSize: isPhone ? 9 : 10, color: s.isHour ? MUTED2 : "transparent", fontWeight: 700, paddingRight: 6, boxSizing: "border-box" }}>
+                    {s.label}{s.dayOffset ? "+1" : ""}
+                  </div>
+                ))}
+              </div>
+
+              {eventDates.map((dateKey, di) => (
+                <div key={dateKey} style={{ flexShrink: 0 }}>
+                  <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
+                    <strong style={{ fontSize: isPhone ? 11 : 12 }}>{formatDateShort(dateKey)}</strong>
+                    <span style={{ color: MUTED2, fontSize: isPhone ? 9 : 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
+                  </div>
+                  {slots.map((s) => {
+                    const count = getCount(dateKey, s.id);
+                    const intensity = count / max;
+                    const bg = count === 0
+                      ? (s.isHour ? "#f3f8ef" : "#fbfdf9")
+                      : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
+                    const names = getNames(dateKey, s.id).join(", ");
+                    const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => toggleSlot(dateKey, s)}
+                        title={`${formatDateLong(dateKey)} ${s.label}${s.dayOffset ? " +1" : ""}: ${count}/${max}${names ? ` · ${names}` : ""}`}
+                        style={{
+                          width: columnWidth,
+                          height: cellHeight,
+                          background: bg,
+                          border: "none",
+                          borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
+                          borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                          boxSizing: "border-box",
+                          color: count > 0 && intensity > 0.58 ? "#fff" : TEXT,
+                          fontSize: isPhone ? 9 : 10,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 900,
+                          cursor: "pointer",
+                          outline: isSelected ? `2px solid ${ACCENT_DARK}` : "none",
+                          outlineOffset: isSelected ? -2 : 0,
+                          boxShadow: isSelected ? "inset 0 0 0 2px #fff, 0 0 0 3px rgba(34,197,94,0.32)" : "none",
+                          transform: isSelected ? "scale(1.03)" : "scale(1)",
+                          position: "relative",
+                          zIndex: isSelected ? 2 : 1,
+                          touchAction: "manipulation",
+                        }}
+                      >
+                        {count > 0 ? count : ""}
+                      </button>
+                    );
+                  })}
                 </div>
               ))}
             </div>
-
-            {eventDates.map((dateKey, di) => (
-              <div key={dateKey} style={{ flexShrink: 0 }}>
-                <div style={{ height: headerHeight, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: columnWidth }}>
-                  <strong style={{ fontSize: 12 }}>{formatDateShort(dateKey)}</strong>
-                  <span style={{ color: MUTED2, fontSize: 10 }}>{WEEKDAYS[(keyToDate(dateKey).getDay() + 6) % 7]}</span>
-                </div>
-                {slots.map((s) => {
-                  const count = getCount(dateKey, s.id);
-                  const intensity = count / max;
-                  const bg = count === 0
-                    ? (s.isHour ? "#f3f8ef" : "#fbfdf9")
-                    : `rgba(34, 197, 94, ${0.16 + intensity * 0.78})`;
-                  const names = getNames(dateKey, s.id).join(", ");
-                  const isSelected = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => toggleSlot(dateKey, s)}
-                      title={`${formatDateLong(dateKey)} ${s.label}${s.dayOffset ? " +1" : ""}: ${count}/${max}${names ? ` · ${names}` : ""}`}
-                      style={{
-                        width: columnWidth,
-                        height: cellHeight,
-                        background: bg,
-                        border: "none",
-                        borderTop: s.isHour ? `1px solid ${BORDER}` : "1px solid transparent",
-                        borderRight: di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
-                        boxSizing: "border-box",
-                        color: count > 0 && intensity > 0.58 ? "#fff" : TEXT,
-                        fontSize: 10,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: 900,
-                        cursor: "pointer",
-                        outline: isSelected ? `2px solid ${ACCENT_DARK}` : "none",
-                        outlineOffset: isSelected ? -2 : 0,
-                        boxShadow: isSelected ? "inset 0 0 0 2px #fff, 0 0 0 3px rgba(34,197,94,0.32)" : "none",
-                        transform: isSelected ? "scale(1.03)" : "scale(1)",
-                        position: "relative",
-                        zIndex: isSelected ? 2 : 1,
-                        touchAction: "manipulation",
-                      }}
-                    >
-                      {count > 0 ? count : ""}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
           </div>
         </div>
 
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: MUTED2 }}>
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: isPhone ? "center" : "flex-start", gap: 5, fontSize: 11, color: MUTED2 }}>
           <span>0</span>
           {[0.1, 0.3, 0.5, 0.7, 0.85, 1].map((v, i) => (
-            <div key={i} style={{ width: 18, height: 10, borderRadius: 999, background: `rgba(34, 197, 94, ${0.16 + v * 0.78})` }} />
+            <div key={i} style={{ width: isPhone ? 16 : 18, height: 9, borderRadius: 999, background: `rgba(34, 197, 94, ${0.16 + v * 0.78})` }} />
           ))}
           <span>{max}</span>
         </div>
@@ -1130,7 +1207,6 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
     </div>
   );
 }
-
 function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, isPhone }) {
   if (!selectedSlot) {
     return (
@@ -1146,7 +1222,7 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
         <div>
           <p style={{ ...sectionTitle, marginBottom: 6 }}>disponíveis neste slot</p>
           <h3 style={{ margin: 0, fontSize: 16 }}>{formatDateLong(selectedSlot.dateKey)} · {selectedSlot.label}{selectedSlot.dayOffset ? " +1" : ""}</h3>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
+          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} aria-label="Fechar lista" style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
