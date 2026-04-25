@@ -653,8 +653,8 @@ export default function App() {
         <div style={{ width: "100%", maxWidth: 440 }}>
           <div style={{ textAlign: "center", marginBottom: 34 }}>
             <div style={{ width: 68, height: 68, background: ACCENT_SOFT, borderRadius: 24, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, margin: "0 auto 16px", border: `1px solid ${BORDER}`, boxShadow: SOFT_SHADOW }}>⚽</div>
-            <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-1px" }}>pelada</h1>
-            <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>cria eventos e encontra a melhor hora</p>
+            <h1 style={{ margin: 0, fontSize: 32, letterSpacing: "-1px" }}>Organiza Eventos</h1>
+            <p style={{ margin: "6px 0 0", color: MUTED2, fontSize: 13 }}>Já que o Pedro dá tilt com os horários e disponibilidades, organiza aqui a melhor hora para todos.</p>
           </div>
 
           {missingEventId && (
@@ -1533,6 +1533,7 @@ const labelStyle = {
   fontSize: 12,
   fontWeight: 700,
 };
+
 
 const sectionTitle = {
   fontSize: 10,
