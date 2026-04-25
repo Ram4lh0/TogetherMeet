@@ -24,10 +24,24 @@ if (typeof document !== "undefined") {
     const style = document.createElement("style");
     style.id = "pelada-mobile-style";
     style.textContent = `
-      html, body, #root { min-height: 100dvh; margin: 0; background: var(--pelada-bg, #f6fbf3); }
-      body { transition: background 0.18s ease, color 0.18s ease; }
-      * { -webkit-tap-highlight-color: transparent; }
-      button, input { font: inherit; }
+      html, body, #root {
+        min-height: 100dvh;
+        margin: 0;
+        background: var(--pelada-bg, #f6fbf3);
+      }
+
+      body {
+        transition: background 0.18s ease, color 0.18s ease;
+      }
+
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -302,7 +316,9 @@ function pad(n) {
 }
 
 function dateToKey(date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}`;
 }
 
 function keyToDate(key) {
@@ -450,6 +466,7 @@ function useIsPhone() {
     const onResize = () => setIsPhone(window.innerWidth <= 760);
 
     onResize();
+
     window.addEventListener("resize", onResize);
 
     return () => window.removeEventListener("resize", onResize);
@@ -461,7 +478,11 @@ function useIsPhone() {
 function useViewportSize() {
   const [size, setSize] = useState(() => {
     if (typeof window === "undefined") return { width: 390, height: 844 };
-    return { width: window.innerWidth, height: window.innerHeight };
+
+    return {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
   });
 
   useEffect(() => {
@@ -473,6 +494,7 @@ function useViewportSize() {
     };
 
     onResize();
+
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
 
@@ -501,13 +523,16 @@ export default function App() {
   const [creatorName, setCreatorName] = useState("");
   const [createStep, setCreateStep] = useState("title");
   const [selectedDates, setSelectedDates] = useState({});
-  const [calendarStart, setCalendarStart] = useState(() => startOfWeekSunday(new Date()));
+  const [calendarStart, setCalendarStart] = useState(() =>
+    startOfWeekSunday(new Date())
+  );
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("22:30");
 
   const [eventCode, setEventCode] = useState("");
   const [participantName, setParticipantName] = useState("");
   const [availability, setAvailability] = useState({});
+
   const [copied, setCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [themeMode, setThemeMode] = useState(getInitialThemeMode);
@@ -621,7 +646,9 @@ export default function App() {
 
     blurActiveElement();
 
-    if (!eventTitle.trim() || !creatorName.trim() || selectedDateKeys.length === 0) return;
+    if (!eventTitle.trim() || !creatorName.trim() || selectedDateKeys.length === 0) {
+      return;
+    }
 
     createSubmitting.current = true;
     setLoading(true);
@@ -646,7 +673,9 @@ export default function App() {
       setCurrentEvent(newEvent);
       setParticipantName(creatorName.trim());
       setAvailability({});
+
       window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
+
       setCreateStep("title");
       setScreen("created");
     } catch {
@@ -788,7 +817,8 @@ export default function App() {
     if (!currentEvent || !name) return null;
 
     return (
-      (currentEvent.responses || []).find((r) => normalizeName(r.name) === name) || null
+      (currentEvent.responses || []).find((r) => normalizeName(r.name) === name) ||
+      null
     );
   }, [currentEvent, participantName]);
 
@@ -834,6 +864,7 @@ export default function App() {
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(eventLink);
+
       setCopied(true);
 
       setTimeout(() => {
@@ -849,6 +880,7 @@ export default function App() {
 
     try {
       await navigator.clipboard.writeText(currentEvent.id);
+
       setCopiedCode(true);
 
       setTimeout(() => {
@@ -862,16 +894,7 @@ export default function App() {
   const shareWhatsApp = () => {
     if (!currentEvent?.id) return;
 
-    const message = `Coloca a tua disponibilidade no evento "${currentEvent.title}".
-
-Entra pelo link ou coloca o código na página principal.
-
-Link:
-${eventLink}
-
-Código:
-${currentEvent.id}`;
-
+    const message = `Coloca a tua disponibilidade no evento "${currentEvent.title}". Entra pelo link ou coloca o código na página principal. Link: ${eventLink} Código: ${currentEvent.id}`;
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
 
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
@@ -885,6 +908,7 @@ ${currentEvent.id}`;
     setCreatorName("");
     setCreateStep("title");
     setError(null);
+
     window.history.pushState({}, "", window.location.pathname);
   };
 
@@ -907,6 +931,7 @@ ${currentEvent.id}`;
   }
 
   // ─────────────────────────────────────────────────────────────── HOME
+
   if (screen === "home") {
     return withTheme(
       <div
@@ -1038,9 +1063,14 @@ ${currentEvent.id}`;
   }
 
   // ─────────────────────────────────────────────────────────────── CREATE
+
   if (screen === "create") {
-    const canContinueTitle = eventTitle.trim().length > 0 && creatorName.trim().length > 0;
-    const canCreate = eventTitle.trim() && creatorName.trim() && selectedDateKeys.length > 0;
+    const canContinueTitle =
+      eventTitle.trim().length > 0 && creatorName.trim().length > 0;
+
+    const canCreate =
+      eventTitle.trim() && creatorName.trim() && selectedDateKeys.length > 0;
+
     const crossesMidnight = parseTime(endTime) <= parseTime(startTime);
 
     if (createStep === "title") {
@@ -1378,6 +1408,7 @@ ${currentEvent.id}`;
   }
 
   // ─────────────────────────────────────────────────────────────── CREATED
+
   if (screen === "created" && currentEvent) {
     return withTheme(
       <div
@@ -1412,10 +1443,13 @@ ${currentEvent.id}`;
             Evento Criado
           </p>
 
-          <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>{currentEvent.title}</h1>
+          <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>
+            {currentEvent.title}
+          </h1>
 
           <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>
-            Partilha o link ou o código com quem queres convidar.
+            Começa por preencher a tua disponibilidade. Depois podes partilhar o link
+            ou o código com os convidados.
           </p>
 
           <div style={{ display: "grid", gap: 10 }}>
@@ -1483,21 +1517,13 @@ ${currentEvent.id}`;
           <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
             <button
               onClick={startCreatorResponse}
-              style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
-            >
-              Preencher Disponibilidade
-            </button>
-
-            <button
-              onClick={() => setScreen("event")}
               style={{
                 ...buttonBase,
-                background: SURFACE,
-                color: TEXT,
-                border: `1px solid ${BORDER}`,
+                background: ACCENT,
+                color: "#fff",
               }}
             >
-              Abrir Evento
+              Preencher Disponibilidade
             </button>
 
             <button
@@ -1541,158 +1567,120 @@ ${currentEvent.id}`;
   }
 
   // ─────────────────────────────────────────────────────────────── EVENT LANDING
-  if (screen === "created" && currentEvent) {
-  return withTheme(
-    <div
-      style={{
-        ...BASE,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
-    >
+
+  if (screen === "event" && currentEvent) {
+    return withTheme(
       <div
         style={{
-          width: "100%",
-          maxWidth: 520,
-          background: SURFACE2,
-          border: `1px solid ${BORDER}`,
-          borderRadius: 28,
-          padding: 22,
+          ...BASE,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
         }}
       >
-        <p
-          style={{
-            margin: 0,
-            color: ACCENT,
-            fontSize: 12,
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.7px",
-          }}
-        >
-          Evento Criado
-        </p>
+        <div style={{ width: "100%", maxWidth: 460 }}>
+          <Header
+            title={currentEvent.title}
+            subtitle={`${currentEvent.dates.length} dia${
+              currentEvent.dates.length !== 1 ? "s" : ""
+            } possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${
+              currentEvent.startTime
+            } às ${currentEvent.endTime}`}
+            onBack={resetToHome}
+          />
 
-        <h1 style={{ margin: "8px 0 4px", fontSize: 24 }}>
-          {currentEvent.title}
-        </h1>
-
-        <p style={{ margin: "0 0 18px", color: MUTED2, fontSize: 13 }}>
-          Partilha o link ou o código com quem queres convidar.
-        </p>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <p
-              style={{
-                margin: "0 0 6px",
-                color: MUTED2,
-                fontSize: 11,
-                fontWeight: 800,
-                textTransform: "uppercase",
-                letterSpacing: "0.7px",
-              }}
-            >
-              Link do Evento
-            </p>
-
+          {(currentEvent.responses?.length || 0) === 0 && currentEvent.creatorName ? (
             <div
               style={{
-                background: SURFACE,
+                background: SURFACE2,
                 border: `1px solid ${BORDER}`,
-                borderRadius: 18,
-                padding: 14,
-                fontSize: 12,
-                color: MUTED2,
-                wordBreak: "break-all",
+                borderRadius: 24,
+                padding: 18,
               }}
             >
-              {eventLink}
+              <p style={{ margin: "0 0 6px", color: MUTED2, fontSize: 12 }}>
+                Primeira resposta
+              </p>
+
+              <h3 style={{ margin: "0 0 12px", fontSize: 18 }}>
+                Criador: {currentEvent.creatorName}
+              </h3>
+
+              <button
+                onClick={startCreatorResponse}
+                style={{
+                  ...buttonBase,
+                  background: ACCENT,
+                  color: "#fff",
+                  width: "100%",
+                }}
+              >
+                Preencher Disponibilidade
+              </button>
             </div>
-          </div>
-
-          <div>
-            <p
-              style={{
-                margin: "0 0 6px",
-                color: MUTED2,
-                fontSize: 11,
-                fontWeight: 800,
-                textTransform: "uppercase",
-                letterSpacing: "0.7px",
-              }}
-            >
-              Código do Evento
-            </p>
-
+          ) : (
             <div
               style={{
-                background: SURFACE,
+                background: SURFACE2,
                 border: `1px solid ${BORDER}`,
-                borderRadius: 18,
-                padding: 14,
-                fontSize: 16,
-                color: TEXT,
-                fontWeight: 900,
-                letterSpacing: "0.5px",
-                wordBreak: "break-all",
+                borderRadius: 24,
+                padding: 18,
               }}
             >
-              {currentEvent.id}
+              <p style={{ margin: "0 0 10px", color: MUTED2, fontSize: 12 }}>
+                Para responder ou editar, escreve o teu nome.
+              </p>
+
+              <input
+                autoFocus
+                value={participantName}
+                onChange={(e) => setParticipantName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && startResponse()}
+                placeholder="O teu nome"
+                style={inputStyle}
+              />
+
+              <button
+                onClick={startResponse}
+                disabled={!participantName.trim()}
+                style={{
+                  ...buttonBase,
+                  background: participantName.trim() ? ACCENT : SURFACE,
+                  color: participantName.trim() ? "#fff" : MUTED2,
+                  width: "100%",
+                  marginTop: 10,
+                }}
+              >
+                {currentParticipantResponse
+                  ? "Editar Disponibilidade"
+                  : "Preencher Disponibilidade"}
+              </button>
             </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-          <button
-            onClick={startCreatorResponse}
-            style={{ ...buttonBase, background: ACCENT, color: "#fff" }}
-          >
-            Preencher Disponibilidade
-          </button>
+          )}
 
           <button
-            onClick={shareWhatsApp}
+            onClick={() => setScreen("results")}
             style={{
-              ...buttonBase,
-              background: "#25D366",
-              color: "#fff",
+              marginTop: 16,
+              background: "transparent",
+              color: MUTED2,
+              border: "none",
+              cursor: "pointer",
+              fontFamily: "'Sora', sans-serif",
+              width: "100%",
             }}
           >
-            Partilhar WhatsApp
-          </button>
-          
-          <button
-            onClick={copyLink}
-            style={{
-              ...buttonBase,
-              background: SURFACE,
-              color: TEXT,
-              border: `1px solid ${BORDER}`,
-            }}
-          >
-            {copied ? "Link Copiado" : "Copiar Link"}
-          </button>
-
-          <button
-            onClick={copyEventCode}
-            style={{
-              ...buttonBase,
-              background: SURFACE,
-              color: TEXT,
-              border: `1px solid ${BORDER}`,
-            }}
-          >
-            {copiedCode ? "Código Copiado" : "Copiar Código"}
+            Ver Resultados · {currentEvent.responses?.length || 0} resposta
+            {(currentEvent.responses?.length || 0) !== 1 ? "s" : ""}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────── FILL
+
   if (screen === "fill" && currentEvent) {
     const canSaveResponse = participantName.trim().length > 0;
     const editingLabel = currentParticipantResponse
@@ -1770,7 +1758,8 @@ ${currentEvent.id}`;
             </strong>
 
             <p style={{ margin: "8px 0 0", color: MUTED2, fontSize: 12 }}>
-              Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover horários.
+              Podes voltar a entrar com o mesmo nome para editar, adicionar ou remover
+              horários.
             </p>
           </div>
 
@@ -1824,6 +1813,7 @@ ${currentEvent.id}`;
   }
 
   // ─────────────────────────────────────────────────────────────── RESULTS
+
   if (screen === "results" && currentEvent) {
     const max = currentEvent.responses?.length || 1;
 
@@ -1962,6 +1952,7 @@ function ThemeToggle({ mode, onToggle }) {
       <span aria-hidden="true" style={{ fontSize: 16 }}>
         {theme.icon}
       </span>
+
       <span>{mode === "dark" ? "Modo Claro" : "Dark Mode"}</span>
     </button>
   );
@@ -1975,7 +1966,6 @@ function IntegratedCalendarPicker({
   onNext,
 }) {
   const isPhone = useIsPhone();
-
   const days = getRollingCalendarDays(startDate, 4);
 
   const visibleLabel = `${MONTHS[startDate.getMonth()].slice(0, 3)} ${startDate.getFullYear()} → ${MONTHS[
@@ -2202,12 +2192,21 @@ function Header({ title, subtitle, onBack, right }) {
             {title}
           </h2>
 
-          <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED2 }}>{subtitle}</p>
+          <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED2 }}>
+            {subtitle}
+          </p>
         </div>
       </div>
 
       {right && (
-        <div style={{ color: ACCENT_DARK, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>
+        <div
+          style={{
+            color: ACCENT_DARK,
+            fontSize: 12,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+          }}
+        >
           {right}
         </div>
       )}
@@ -2231,7 +2230,8 @@ function BestOptionsList({ bestOptions }) {
           marginBottom: isPhone ? 12 : 16,
         }}
       >
-        Ainda não há opções suficientes. Assim que alguém responder, as melhores horas aparecem aqui.
+        Ainda não há opções suficientes. Assim que alguém responder, as melhores horas
+        aparecem aqui.
       </div>
     );
   }
@@ -2359,8 +2359,7 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
                   boxSizing: "border-box",
                 }}
               >
-                {s.label}
-                {s.dayOffset ? "+1" : ""}
+                {s.label} {s.dayOffset ? "+1" : ""}
               </div>
             ))}
           </div>
@@ -2423,7 +2422,6 @@ function AvailabilityGrid({ eventDates, slots, availability, onCellDown, onCellE
 function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   const isPhone = useIsPhone();
   const viewport = useViewportSize();
-
   const [selectedSlot, setSelectedSlot] = useState(null);
   const peoplePanelRef = useRef(null);
 
@@ -2444,7 +2442,8 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   const selectedNames = selectedSlot ? getNames(selectedSlot.dateKey, selectedSlot.slotId) : [];
 
   const toggleSlot = (dateKey, slot) => {
-    const sameSlot = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === slot.id;
+    const sameSlot =
+      selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === slot.id;
 
     setSelectedSlot(
       sameSlot
@@ -2513,8 +2512,7 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                       boxSizing: "border-box",
                     }}
                   >
-                    {s.label}
-                    {s.dayOffset ? "+1" : ""}
+                    {s.label} {s.dayOffset ? "+1" : ""}
                   </div>
                 ))}
               </div>
@@ -2553,7 +2551,8 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
 
                     const names = getNames(dateKey, s.id).join(", ");
                     const isSelected =
-                      selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === s.id;
+                      selectedSlot?.dateKey === dateKey &&
+                      selectedSlot?.slotId === s.id;
 
                     const slotInterval = formatSlotInterval(dateKey, s.id);
 
@@ -2577,7 +2576,9 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
                             ? `1px solid ${BORDER}`
                             : "1px solid transparent",
                           borderRight:
-                            di < eventDates.length - 1 ? `1px solid ${BORDER}` : "none",
+                            di < eventDates.length - 1
+                              ? `1px solid ${BORDER}`
+                              : "none",
                           boxSizing: "border-box",
                           color: count > 0 && intensity > 0.58 ? "#fff" : TEXT,
                           fontSize: isPhone ? 9 : 10,
@@ -2649,7 +2650,13 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
   );
 }
 
-function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, isPhone }) {
+function SlotPeoplePanel({
+  selectedSlot,
+  selectedCount,
+  selectedNames,
+  onClose,
+  isPhone,
+}) {
   if (!selectedSlot) {
     return (
       <aside
