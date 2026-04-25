@@ -718,16 +718,13 @@ export default function App() {
                 ⚡
               </div>
 
-              <p style={{ margin: "0 0 8px", color: ACCENT_DARK, fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+              <p style={{ margin: "0 0 8px", color: ACCENT_DARK, fontSize: 26, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.8px" }}>
                 novo evento
               </p>
 
-              <h1 style={{ margin: "0 0 10px", fontSize: 31, lineHeight: 1.04, letterSpacing: "-1.2px" }}>
-                Como se chama?
-              </h1>
 
-              <p style={{ margin: "0 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>
-                Dá um nome ao evento e identifica o criador. A primeira disponibilidade fica automaticamente associada ao criador.
+              <p style={{ margin: "15px 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>
+                Dá um nome ao evento e identifica o criador.
               </p>
 
               <label style={{ ...labelStyle, display: "block", marginBottom: 12 }}>
@@ -736,7 +733,7 @@ export default function App() {
                   autoFocus
                   value={eventTitle}
                   onChange={(e) => setEventTitle(e.target.value)}
-                  placeholder="ex.: Futsal sexta à noite"
+                  placeholder="ex: Futsal sexta à noite"
                   style={{ ...inputStyle, fontSize: 17, padding: "16px 17px", marginTop: 7 }}
                 />
               </label>
@@ -747,7 +744,7 @@ export default function App() {
                   value={creatorName}
                   onChange={(e) => setCreatorName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && canContinueTitle && setCreateStep("details")}
-                  placeholder="ex.: António"
+                  placeholder="ex: Pedro Salgado"
                   style={{ ...inputStyle, fontSize: 17, padding: "16px 17px", marginTop: 7 }}
                 />
               </label>
