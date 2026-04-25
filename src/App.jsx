@@ -535,7 +535,7 @@ export default function App() {
               </p>
 
               <h1 style={{ margin: "0 0 10px", fontSize: 31, lineHeight: 1.04, letterSpacing: "-1.2px" }}>
-                Como se chama?
+                Qual vai ser o nome do evento?
               </h1>
 
               <p style={{ margin: "0 0 20px", color: MUTED2, fontSize: 14, lineHeight: 1.5 }}>
