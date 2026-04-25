@@ -1357,7 +1357,7 @@ function SlotPeoplePanel({ selectedSlot, selectedCount, selectedNames, onClose, 
           <p style={{ margin: "4px 0 0", color: TEXT, fontSize: 14, fontWeight: 900 }}>
             {slotInterval.range}{slotInterval.endDate ? ` · acaba em ${slotInterval.endDate}` : ""}
           </p>
-          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} sim{selectedCount !== 1 ? "s" : ""}</p>
+          <p style={{ margin: "6px 0 0", color: ACCENT_DARK, fontSize: 13, fontWeight: 900 }}>{selectedCount} pessoa{selectedCount !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} style={{ ...miniButton, width: 32, height: 32 }}>×</button>
       </div>
