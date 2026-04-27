@@ -189,7 +189,7 @@ async function fetchEventById(id) {
     .select("id, participant_name, updated_at")
     .eq("event_id", id);
 
-  const fullResponses = await Promise.all(
+  const rawResponses = await Promise.all(
     (responses || []).map(async (r) => {
       const { data: slots } = await supabase
         .from("availability_slots")
@@ -202,14 +202,45 @@ async function fetchEventById(id) {
         availability[`${date}|${slot_minutes}`] = true;
       });
 
+      const displayName = toTitleCase(r.participant_name);
+
       return {
-        name: r.participant_name,
-        nameKey: normalizeName(r.participant_name),
+        name: displayName,
+        nameKey: normalizeName(displayName),
         availability,
         updatedAt: r.updated_at,
         _id: r.id,
       };
     })
+  );
+
+  const responsesByName = new Map();
+
+  rawResponses.forEach((response) => {
+    const key = response.nameKey;
+    const existing = responsesByName.get(key);
+
+    if (!existing) {
+      responsesByName.set(key, response);
+      return;
+    }
+
+    responsesByName.set(key, {
+      ...existing,
+      name: toTitleCase(existing.name || response.name),
+      availability: {
+        ...existing.availability,
+        ...response.availability,
+      },
+      updatedAt:
+        new Date(response.updatedAt || 0) > new Date(existing.updatedAt || 0)
+          ? response.updatedAt
+          : existing.updatedAt,
+    });
+  });
+
+  const fullResponses = Array.from(responsesByName.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "pt-PT")
   );
 
   return {
@@ -228,7 +259,7 @@ async function insertEvent(event) {
   const { error } = await supabase.from("events").insert({
     id: event.id,
     title: event.title,
-    creator_name: event.creatorName,
+    creator_name: toTitleCase(event.creatorName),
     start_time: event.startTime,
     end_time: event.endTime,
   });
@@ -248,33 +279,69 @@ async function insertEvent(event) {
 }
 
 async function upsertResponse(eventId, participantName, availability) {
-  const { data: existing } = await supabase
+  const cleanName = toTitleCase(participantName);
+  const cleanNameKey = normalizeName(cleanName);
+
+  const { data: responseCandidates, error: findError } = await supabase
     .from("responses")
-    .select("id")
-    .eq("event_id", eventId)
-    .eq("participant_name", participantName)
-    .maybeSingle();
+    .select("id, participant_name, updated_at")
+    .eq("event_id", eventId);
+
+  if (findError) throw findError;
+
+  const matchingResponses = (responseCandidates || [])
+    .filter((r) => normalizeName(r.participant_name) === cleanNameKey)
+    .sort(
+      (a, b) =>
+        new Date(b.updated_at || 0).getTime() -
+        new Date(a.updated_at || 0).getTime()
+    );
 
   let responseId;
 
-  if (existing) {
-    responseId = existing.id;
+  if (matchingResponses.length > 0) {
+    responseId = matchingResponses[0].id;
 
-    await supabase
+    const duplicateIds = matchingResponses.slice(1).map((r) => r.id);
+
+    if (duplicateIds.length > 0) {
+      const { error: duplicateSlotsError } = await supabase
+        .from("availability_slots")
+        .delete()
+        .in("response_id", duplicateIds);
+
+      if (duplicateSlotsError) throw duplicateSlotsError;
+
+      const { error: duplicateResponsesError } = await supabase
+        .from("responses")
+        .delete()
+        .in("id", duplicateIds);
+
+      if (duplicateResponsesError) throw duplicateResponsesError;
+    }
+
+    const { error: clearSlotsError } = await supabase
       .from("availability_slots")
       .delete()
       .eq("response_id", responseId);
 
-    await supabase
+    if (clearSlotsError) throw clearSlotsError;
+
+    const { error: updateError } = await supabase
       .from("responses")
-      .update({ updated_at: new Date().toISOString() })
+      .update({
+        participant_name: cleanName,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", responseId);
+
+    if (updateError) throw updateError;
   } else {
     const { data: newResponse, error } = await supabase
       .from("responses")
       .insert({
         event_id: eventId,
-        participant_name: participantName,
+        participant_name: cleanName,
       })
       .select("id")
       .single();
@@ -388,7 +455,35 @@ function formatSlotInterval(dateKey, slotId, duration = 30) {
 }
 
 function normalizeName(name) {
-  return name.trim().replace(/\s+/g, " ").toLowerCase();
+  return String(name || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-PT");
+}
+
+function toTitleCase(str) {
+  const particles = new Set(["de", "da", "do", "das", "dos", "e"]);
+
+  return String(str || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("pt-PT")
+    .split(" ")
+    .map((word, wordIndex) =>
+      word
+        .split("-")
+        .map((part, partIndex) => {
+          if (!part) return part;
+          if ((wordIndex > 0 || partIndex > 0) && particles.has(part)) {
+            return part;
+          }
+
+          return `${part.charAt(0).toLocaleUpperCase("pt-PT")}${part.slice(1)}`;
+        })
+        .join("-")
+    )
+    .join(" ");
+}
+
+function possibleDaysLabel(count) {
+  return `${count} dia${count !== 1 ? "s" : ""} possíve${count !== 1 ? "is" : "l"}`;
 }
 
 function clamp(value, min, max) {
@@ -656,10 +751,12 @@ export default function App() {
 
     const id = uid();
 
+    const normalizedCreatorName = toTitleCase(creatorName);
+
     const newEvent = {
       id,
       title: eventTitle.trim(),
-      creatorName: creatorName.trim(),
+      creatorName: normalizedCreatorName,
       dates: selectedDateKeys,
       startTime,
       endTime,
@@ -671,7 +768,8 @@ export default function App() {
       await insertEvent(newEvent);
 
       setCurrentEvent(newEvent);
-      setParticipantName(creatorName.trim());
+      setCreatorName(normalizedCreatorName);
+      setParticipantName(normalizedCreatorName);
       setAvailability({});
 
       window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
@@ -698,7 +796,7 @@ export default function App() {
   };
 
   const startResponse = () => {
-    const name = participantName.trim();
+    const name = toTitleCase(participantName);
 
     if (!name || !currentEvent) return;
 
@@ -706,12 +804,13 @@ export default function App() {
       (r) => normalizeName(r.name) === normalizeName(name)
     );
 
+    setParticipantName(name);
     setAvailability(existing?.availability || {});
     setScreen("fill");
   };
 
   const startCreatorResponse = () => {
-    const name = currentEvent?.creatorName?.trim();
+    const name = toTitleCase(currentEvent?.creatorName || "");
 
     if (!name || !currentEvent) return;
 
@@ -772,10 +871,11 @@ export default function App() {
 
     dragging.current = false;
 
-    const name = participantName.trim();
+    const name = toTitleCase(participantName);
 
     if (!currentEvent || !name) return;
 
+    setParticipantName(name);
     responseSubmitting.current = true;
     setLoading(true);
     setError(null);
@@ -1582,9 +1682,7 @@ export default function App() {
         <div style={{ width: "100%", maxWidth: 460 }}>
           <Header
             title={currentEvent.title}
-            subtitle={`${currentEvent.dates.length} dia${
-              currentEvent.dates.length !== 1 ? "s" : ""
-            } possível${currentEvent.dates.length !== 1 ? "eis" : ""} · ${
+            subtitle={`${possibleDaysLabel(currentEvent.dates.length)} · ${
               currentEvent.startTime
             } às ${currentEvent.endTime}`}
             onBack={resetToHome}
