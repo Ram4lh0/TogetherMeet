@@ -509,6 +509,7 @@ export default function App() {
   const [screen, setScreen] = useState("home");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [pendingEventId, setPendingEventId] = useState(null); // event id from URL, waiting for auth
 
   // Create event
   const [eventTitle, setEventTitle] = useState("");
@@ -550,7 +551,13 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) loadProfile(session.user.id);
-      else setAuthLoading(false);
+      else {
+        // Check for event link before auth
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get("event");
+        if (id) setPendingEventId(id.trim());
+        setAuthLoading(false);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -567,6 +574,33 @@ export default function App() {
     setProfile(p);
     setAuthLoading(false);
   };
+
+  // ── After login with pending event, load it and go to name entry ──
+  useEffect(() => {
+    if (!session || !profile || !pendingEventId) return;
+    const id = pendingEventId;
+    setPendingEventId(null);
+    (async () => {
+      setLoading(true);
+      try {
+        const ev = await fetchEventById(id);
+        if (ev) {
+          setCurrentEvent(ev);
+          window.history.pushState({}, "", `${window.location.pathname}?event=${id}`);
+          const existingResponse = ev.responses?.find((r) => r.userId === session.user.id);
+          setParticipantDisplayName(profile.display_name);
+          setAvailability(existingResponse?.availability || {});
+          setScreen("nameEntry");
+        } else {
+          setError("Evento não encontrado.");
+        }
+      } catch {
+        setError("Erro ao carregar evento.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [session, profile, pendingEventId]);
 
   // ── Theme ──
   useEffect(() => {
@@ -594,8 +628,9 @@ export default function App() {
     [themeMode, toggleTheme, profile]
   );
 
-  // ── URL event param ──
+  // ── URL event param (when already logged in) ──
   useEffect(() => {
+    if (!session) return; // handled by pendingEventId flow
     const params = new URLSearchParams(window.location.search);
     const id = params.get("event");
     if (id) loadEvent(id);
@@ -888,7 +923,41 @@ export default function App() {
 
   // ── Sem sessão → Auth screens ──
   if (!session) {
-    return <AuthScreen onSuccess={() => {}} />;
+    return <AuthScreen onSuccess={() => { }} pendingEventId={pendingEventId} />;
+  }
+
+  // ── Name entry screen (entered via link) ──
+  if (screen === "nameEntry" && currentEvent) {
+    const canContinue = (participantDisplayName.trim() || profile?.display_name || "").length > 0;
+    return withTheme(
+      <div style={{ ...BASE, display: "flex", alignItems: "center", justifyContent: "center", padding: "80px 24px 40px" }}>
+        <div style={{ width: "100%", maxWidth: 420 }}>
+          <div style={modalCardStyle}>
+            <div style={{ width: 52, height: 52, borderRadius: 20, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, marginBottom: 16 }}>👋</div>
+            <p style={{ margin: "0 0 4px", color: ACCENT_DARK, fontSize: 22, fontWeight: 900 }}>{currentEvent.title}</p>
+            <p style={{ margin: "0 0 20px", color: MUTED2, fontSize: 13 }}>Como queres aparecer neste evento?</p>
+            <label style={{ ...labelStyle, display: "block", marginBottom: 14 }}>
+              O teu nome
+              <input
+                autoFocus
+                value={participantDisplayName}
+                onChange={(e) => setParticipantDisplayName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && canContinue && (() => { setScreen("fill"); })()}
+                placeholder={profile?.display_name || "O teu nome"}
+                style={{ ...inputStyle, fontSize: 16, padding: "14px 16px", marginTop: 8 }}
+              />
+            </label>
+            <button
+              onClick={() => setScreen("fill")}
+              disabled={!canContinue}
+              style={{ ...buttonBase, width: "100%", background: canContinue ? ACCENT : DISABLED_BG, color: canContinue ? "#fff" : MUTED2, boxShadow: canContinue ? "0 14px 32px rgba(34,197,94,0.22)" : "none" }}
+            >
+              Continuar para Disponibilidade
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Loading geral ──
@@ -1225,20 +1294,86 @@ export default function App() {
                   />
                 </div>
               )}
-              <button
-                onClick={startResponse}
-                style={{ ...buttonBase, background: ACCENT, color: "#fff", width: "100%", marginTop: 6 }}
-              >
-                {currentParticipantResponse ? "Editar Disponibilidade" : "Preencher Disponibilidade"}
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={startResponse}
+                  style={{ ...buttonBase, background: ACCENT, color: "#fff", flex: 1, marginTop: 6 }}
+                >
+                  {currentParticipantResponse ? "Editar Disponibilidade" : "Preencher Disponibilidade"}
+                </button>
+                {currentParticipantResponse && (
+                  <button
+                    onClick={() => setScreen("results")}
+                    style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}`, flex: 1, marginTop: 6 }}
+                  >
+                    Ver Disponibilidades
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
           {isOwner && !isConfirmed && (
             <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18, marginBottom: 14 }}>
-              <p style={{ margin: "0 0 12px", fontWeight: 800, fontSize: 14 }}>Confirmar Horário</p>
-              <p style={{ margin: "0 0 12px", fontSize: 12, color: MUTED2 }}>Escolhe o horário final e tranca o evento.</p>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 12, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📅</div>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 900, fontSize: 15, color: TEXT }}>Confirmar Horário</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 11, color: MUTED2 }}>Escolhe o horário final e tranca o evento</p>
+                </div>
+              </div>
 
+              {/* Top 2 suggestions */}
+              {bestOptions.slice(0, 2).length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <p style={{ ...sectionTitle, marginBottom: 8 }}>💡 Sugestões com mais disponibilidade</p>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {bestOptions.slice(0, 2).map((o, index) => {
+                      const interval = formatSlotInterval(o.dateKey, o.slot.id);
+                      const isTop = index === 0;
+                      return (
+                        <button
+                          key={`${o.dateKey}-${o.slot.id}`}
+                          type="button"
+                          onClick={() => {
+                            setConfirmDate(o.dateKey);
+                            setConfirmStart(o.slot.label);
+                            const endMin = Number(o.slot.id) + 30;
+                            setConfirmEnd(timeLabel(endMin));
+                          }}
+                          style={{
+                            background: isTop ? ACCENT_SOFT : SURFACE,
+                            border: `1.5px solid ${isTop ? ACCENT : BORDER}`,
+                            borderRadius: 14, padding: "10px 12px",
+                            cursor: "pointer", textAlign: "left",
+                            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+                            fontFamily: "'Sora', sans-serif",
+                          }}
+                        >
+                          <div>
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: isTop ? ACCENT_DARK : TEXT }}>
+                              {isTop ? "🥇" : "🥈"} {interval.date} · {interval.range}
+                            </p>
+                            <p style={{ margin: "3px 0 0", fontSize: 11, color: MUTED2 }}>
+                              {o.names.slice(0, 3).join(", ")}{o.names.length > 3 ? ` +${o.names.length - 3}` : ""}
+                            </p>
+                          </div>
+                          <span style={{ background: isTop ? ACCENT : SURFACE2, color: isTop ? "#fff" : ACCENT_DARK, borderRadius: 999, padding: "4px 9px", fontSize: 12, fontWeight: 900, flexShrink: 0 }}>
+                            {o.count} pessoa{o.count !== 1 ? "s" : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ margin: "8px 0 0", fontSize: 11, color: MUTED2 }}>Clica numa sugestão para pré-preencher os campos abaixo.</p>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div style={{ height: 1, background: BORDER, margin: "14px 0" }} />
+
+              {/* Form */}
               <div style={{ display: "grid", gap: 10 }}>
                 <label style={labelStyle}>
                   Data
@@ -1262,9 +1397,9 @@ export default function App() {
                 <button
                   onClick={submitConfirmEvent}
                   disabled={!confirmDate || !confirmStart || !confirmEnd}
-                  style={{ ...buttonBase, background: confirmDate && confirmStart && confirmEnd ? ACCENT : DISABLED_BG, color: confirmDate && confirmStart && confirmEnd ? "#fff" : MUTED2 }}
+                  style={{ ...buttonBase, width: "100%", background: confirmDate && confirmStart && confirmEnd ? ACCENT : DISABLED_BG, color: confirmDate && confirmStart && confirmEnd ? "#fff" : MUTED2, boxShadow: confirmDate && confirmStart && confirmEnd ? "0 10px 28px rgba(34,197,94,0.22)" : "none" }}
                 >
-                  Confirmar e Trancar Evento
+                  ✅ Confirmar e Trancar Evento
                 </button>
               </div>
             </div>
@@ -1379,7 +1514,12 @@ export default function App() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 28 }}>
             {currentParticipantResponse && !isConfirmed && (
               <button onClick={editCurrentAvailability} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>
-                Editar a Minha Disponibilidade
+                Editar Disponibilidade
+              </button>
+            )}
+            {!currentParticipantResponse && !isConfirmed && (
+              <button onClick={startResponse} style={{ ...buttonBase, background: ACCENT, color: "#fff" }}>
+                Preencher Disponibilidade
               </button>
             )}
             <button onClick={shareWhatsApp} style={{ ...buttonBase, background: "#25D366", color: "#fff" }}>Partilhar WhatsApp</button>
