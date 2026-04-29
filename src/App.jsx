@@ -1314,7 +1314,7 @@ export default function App() {
           )}
 
           {isOwner && !isConfirmed && (
-            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18, marginBottom: 14 }}>
+            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18, marginBottom: 14, boxSizing: "border-box" }}>
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 12, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📅</div>
@@ -1325,73 +1325,77 @@ export default function App() {
               </div>
 
               {/* Top 2 suggestions */}
-              {bestOptions.slice(0, 2).length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <p style={{ ...sectionTitle, marginBottom: 8 }}>💡 Sugestões com mais disponibilidade</p>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {bestOptions.slice(0, 2).map((o, index) => {
-                      const interval = formatSlotInterval(o.dateKey, o.slot.id);
-                      const isTop = index === 0;
-                      return (
-                        <button
-                          key={`${o.dateKey}-${o.slot.id}`}
-                          type="button"
-                          onClick={() => {
-                            setConfirmDate(o.dateKey);
-                            setConfirmStart(o.slot.label);
-                            const endMin = Number(o.slot.id) + 30;
-                            setConfirmEnd(timeLabel(endMin));
-                          }}
-                          style={{
-                            background: isTop ? ACCENT_SOFT : SURFACE,
-                            border: `1.5px solid ${isTop ? ACCENT : BORDER}`,
-                            borderRadius: 14, padding: "10px 12px",
-                            cursor: "pointer", textAlign: "left",
-                            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-                            fontFamily: "'Sora', sans-serif",
-                          }}
-                        >
-                          <div>
-                            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: isTop ? ACCENT_DARK : TEXT }}>
-                              {isTop ? "🥇" : "🥈"} {interval.date} · {interval.range}
-                            </p>
-                            <p style={{ margin: "3px 0 0", fontSize: 11, color: MUTED2 }}>
-                              {o.names.slice(0, 3).join(", ")}{o.names.length > 3 ? ` +${o.names.length - 3}` : ""}
-                            </p>
-                          </div>
-                          <span style={{ background: isTop ? ACCENT : SURFACE2, color: isTop ? "#fff" : ACCENT_DARK, borderRadius: 999, padding: "4px 9px", fontSize: 12, fontWeight: 900, flexShrink: 0 }}>
-                            {o.count} pessoa{o.count !== 1 ? "s" : ""}
-                          </span>
-                        </button>
-                      );
-                    })}
+              {bestOptions.slice(0, 2).length > 0 && (() => {
+                const selectedKey = confirmDate && confirmStart ? `${confirmDate}|${parseTime(confirmStart)}` : null;
+                return (
+                  <div style={{ marginBottom: 14 }}>
+                    <p style={{ ...sectionTitle, marginBottom: 8 }}>💡 Sugestões com mais disponibilidade</p>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {bestOptions.slice(0, 2).map((o) => {
+                        const interval = formatSlotInterval(o.dateKey, o.slot.id);
+                        const isSelected = selectedKey === `${o.dateKey}|${o.slot.id}`;
+                        return (
+                          <button
+                            key={`${o.dateKey}-${o.slot.id}`}
+                            type="button"
+                            onClick={() => {
+                              setConfirmDate(o.dateKey);
+                              setConfirmStart(o.slot.label);
+                              const endMin = Number(o.slot.id) + 30;
+                              setConfirmEnd(timeLabel(endMin));
+                            }}
+                            style={{
+                              background: isSelected ? ACCENT_SOFT : SURFACE,
+                              border: `1.5px solid ${isSelected ? ACCENT : BORDER}`,
+                              borderRadius: 14, padding: "10px 12px",
+                              cursor: "pointer", textAlign: "left", width: "100%", boxSizing: "border-box",
+                              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+                              fontFamily: "'Sora', sans-serif",
+                              transition: "background 0.15s, border-color 0.15s",
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: isSelected ? ACCENT_DARK : TEXT }}>
+                                {interval.date} · {interval.range}
+                              </p>
+                              <p style={{ margin: "3px 0 0", fontSize: 11, color: MUTED2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {o.names.slice(0, 3).join(", ")}{o.names.length > 3 ? ` +${o.names.length - 3}` : ""}
+                              </p>
+                            </div>
+                            <span style={{ background: isSelected ? ACCENT : "var(--pelada-disabled-bg)", color: isSelected ? "#fff" : ACCENT_DARK, borderRadius: 999, padding: "4px 9px", fontSize: 12, fontWeight: 900, flexShrink: 0, transition: "background 0.15s, color 0.15s" }}>
+                              {o.count} pessoa{o.count !== 1 ? "s" : ""}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p style={{ margin: "8px 0 0", fontSize: 11, color: MUTED2 }}>Clica numa sugestão para a selecionar e pré-preencher os campos.</p>
                   </div>
-                  <p style={{ margin: "8px 0 0", fontSize: 11, color: MUTED2 }}>Clica numa sugestão para pré-preencher os campos abaixo.</p>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Divider */}
               <div style={{ height: 1, background: BORDER, margin: "14px 0" }} />
 
               {/* Form */}
               <div style={{ display: "grid", gap: 10 }}>
-                <label style={labelStyle}>
+                <label style={{ ...labelStyle, display: "block" }}>
                   Data
-                  <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
+                  <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%" }} />
                 </label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <label style={labelStyle}>
+                  <label style={{ ...labelStyle, display: "block" }}>
                     Início
-                    <input type="time" step="1800" value={confirmStart} onChange={(e) => setConfirmStart(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
+                    <input type="time" step="1800" value={confirmStart} onChange={(e) => setConfirmStart(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%", padding: "14px 10px" }} />
                   </label>
-                  <label style={labelStyle}>
+                  <label style={{ ...labelStyle, display: "block" }}>
                     Fim
-                    <input type="time" step="1800" value={confirmEnd} onChange={(e) => setConfirmEnd(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
+                    <input type="time" step="1800" value={confirmEnd} onChange={(e) => setConfirmEnd(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%", padding: "14px 10px" }} />
                   </label>
                 </div>
-                <label style={labelStyle}>
+                <label style={{ ...labelStyle, display: "block" }}>
                   Duração (minutos, opcional)
-                  <input type="number" min="1" value={confirmDuration} onChange={(e) => setConfirmDuration(e.target.value)} placeholder="Ex: 90" style={{ ...inputStyle, marginTop: 6 }} />
+                  <input type="number" min="1" value={confirmDuration} onChange={(e) => setConfirmDuration(e.target.value)} placeholder="Ex: 90" style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%" }} />
                 </label>
                 {error && <ErrorBanner message={error} />}
                 <button
@@ -1843,7 +1847,14 @@ function Heatmap({ eventDates, slots, max, getCount, getNames }) {
     const sameSlot = selectedSlot?.dateKey === dateKey && selectedSlot?.slotId === slot.id;
     setSelectedSlot(sameSlot ? null : { dateKey, slotId: slot.id, label: slot.label, dayOffset: slot.dayOffset });
     if (!sameSlot && isPhone) {
-      window.setTimeout(() => { peoplePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 80);
+      window.setTimeout(() => {
+        const el = peoplePanelRef.current;
+        if (!el) return;
+        const elRect = el.getBoundingClientRect();
+        const elCenter = elRect.top + elRect.height / 2;
+        const viewCenter = window.innerHeight / 2;
+        window.scrollBy({ top: elCenter - viewCenter, behavior: "smooth" });
+      }, 120);
     }
   };
 
