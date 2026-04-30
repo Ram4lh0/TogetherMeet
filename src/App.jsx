@@ -32,6 +32,11 @@ if (typeof document !== "undefined") {
       body { transition: background 0.18s ease, color 0.18s ease; }
       * { -webkit-tap-highlight-color: transparent; }
       button, input { font: inherit; }
+      input[type="date"], input[type="time"] {
+        min-width: 0; /* Impede que o input force a largura original do sistema */
+        -webkit-appearance: none; /* Remove estilos nativos que podem causar bugs de box-model */
+        background: transparent;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -1314,7 +1319,7 @@ export default function App() {
           )}
 
           {isOwner && !isConfirmed && (
-            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18, marginBottom: 14, boxSizing: "border-box" }}>
+            <div style={{ background: SURFACE2, border: `1px solid ${BORDER}`, borderRadius: 24, padding: 18, marginBottom: 14, boxSizing: "border-box", width: "100%", overflow: "hidden" }}>
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 12, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📅</div>
@@ -1384,13 +1389,13 @@ export default function App() {
                   <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%" }} />
                 </label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <label style={{ ...labelStyle, display: "block" }}>
+                  <label style={{ ...labelStyle, display: "block", minWidth: 0 }}>
                     Início
-                    <input type="time" step="1800" value={confirmStart} onChange={(e) => setConfirmStart(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%", padding: "14px 10px" }} />
+                    <input type="time" step="1800" value={confirmStart} onChange={(e) => setConfirmStart(e.target.value)} style={{ ...inputStyle, marginTop: 6, width: "100%", boxSizing: "border-box", padding: "14px 8px" }} />
                   </label>
-                  <label style={{ ...labelStyle, display: "block" }}>
+                  <label style={{ ...labelStyle, display: "block", minWidth: 0 }}>
                     Fim
-                    <input type="time" step="1800" value={confirmEnd} onChange={(e) => setConfirmEnd(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%", padding: "14px 10px" }} />
+                    <input type="time" step="1800" value={confirmEnd} onChange={(e) => setConfirmEnd(e.target.value)} style={{ ...inputStyle, marginTop: 6, width: "100%", boxSizing: "border-box", padding: "14px 8px" }} />
                   </label>
                 </div>
                 <label style={{ ...labelStyle, display: "block" }}>
