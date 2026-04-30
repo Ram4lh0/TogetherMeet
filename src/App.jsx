@@ -36,6 +36,9 @@ if (typeof document !== "undefined") {
         min-width: 0; /* Impede que o input force a largura original do sistema */
         -webkit-appearance: none; /* Remove estilos nativos que podem causar bugs de box-model */
         background: transparent;
+        min-height: 48px; /* Força a mesma altura dos botões */
+        display: flex; /* Ajuda o Safari a alinhar o placeholder verticalmente */
+        align-items: center;
       }
     `;
     document.head.appendChild(style);
@@ -1386,16 +1389,16 @@ export default function App() {
               <div style={{ display: "grid", gap: 10 }}>
                 <label style={{ ...labelStyle, display: "block" }}>
                   Data
-                  <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%" }} />
+                  <input type="date" value={confirmDate} onChange={(e) => setConfirmDate(e.target.value)} style={{ ...inputStyle, marginTop: 6, boxSizing: "border-box", width: "100%", height: "52px" }} />
                 </label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <label style={{ ...labelStyle, display: "block", minWidth: 0 }}>
                     Início
-                    <input type="time" step="1800" value={confirmStart} onChange={(e) => setConfirmStart(e.target.value)} style={{ ...inputStyle, marginTop: 6, width: "100%", boxSizing: "border-box", padding: "14px 8px" }} />
+                    <input type="time" step="1800" value={confirmStart} onChange={(e) => setConfirmStart(e.target.value)} style={{ ...inputStyle, marginTop: 6, width: "100%", boxSizing: "border-box", padding: "14px 8px", height: "52px" }} />
                   </label>
                   <label style={{ ...labelStyle, display: "block", minWidth: 0 }}>
                     Fim
-                    <input type="time" step="1800" value={confirmEnd} onChange={(e) => setConfirmEnd(e.target.value)} style={{ ...inputStyle, marginTop: 6, width: "100%", boxSizing: "border-box", padding: "14px 8px" }} />
+                    <input type="time" step="1800" value={confirmEnd} onChange={(e) => setConfirmEnd(e.target.value)} style={{ ...inputStyle, marginTop: 6, width: "100%", boxSizing: "border-box", padding: "14px 8px", height: "52px" }} />
                   </label>
                 </div>
                 <label style={{ ...labelStyle, display: "block" }}>
