@@ -142,6 +142,21 @@ async function fetchClubAvailability(club, date) {
   return res.json();
 }
 
+function getPlaytomicBookingUrl(club, date) {
+  const isAndroid =
+    typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  const source = isAndroid ? "app_android" : "app_ios";
+
+  const params = new URLSearchParams({
+    utm_source: source,
+    utm_campaign: "share",
+  });
+
+  if (date) params.set("date", date);
+
+  return `https://playtomic.io/tenant/${club.tenantId}?${params.toString()}`;
+}
+
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -1704,9 +1719,7 @@ export default function App() {
                   )}
                 </div>
                 <a
-                  href={`https://playtomic.com/clubs/${club.slug}?date=${playtomicResults.date}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={getPlaytomicBookingUrl(club, playtomicResults.date)}
                   style={{ ...buttonBase, background: ACCENT, color: "#fff", fontSize: 13, padding: "10px 14px", textDecoration: "none", borderRadius: 14, flexShrink: 0 }}
                 >
                   Reservar ↗
