@@ -136,7 +136,7 @@ const PLAYTOMIC_CLUBS = [
 
 async function fetchClubAvailability(club, date) {
   const res = await fetch(
-    `https://playtomic.com/api/clubs/availability?tenant_id=${club.tenantId}&date=${date}&sport_id=${club.sportId}`
+    `/api/playtomic?tenant_id=${club.tenantId}&date=${date}&sport_id=${club.sportId}`
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
