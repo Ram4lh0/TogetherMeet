@@ -117,6 +117,31 @@ const CARD_SHADOW = "var(--pelada-card-shadow)";
 const SOFT_SHADOW = "var(--pelada-soft-shadow)";
 const INPUT_SHADOW = "var(--pelada-input-shadow)";
 
+// ─── Playtomic ────────────────────────────────────────────────────────────────
+
+const PLAYTOMIC_CLUBS = [
+  {
+    name: "ESPAV (Alvalade)",
+    tenantId: "af3e0532-cf37-43df-9278-c1de1f1a786c",
+    sportId: "FOOTBALL_OTHERS",
+    url: "https://playtomic.com/club/af3e0532-cf37-43df-9278-c1de1f1a786c",
+  },
+  {
+    name: "Parque das Nações",
+    tenantId: "4c1a676f-fd98-4a84-98f7-93403cb359ff",
+    sportId: "FOOTBALL7",
+    url: "https://playtomic.com/club/4c1a676f-fd98-4a84-98f7-93403cb359ff",
+  },
+];
+
+async function fetchClubAvailability(club, date) {
+  const res = await fetch(
+    `https://playtomic.com/api/clubs/availability?tenant_id=${club.tenantId}&date=${date}&sport_id=${club.sportId}`
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -547,6 +572,10 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Playtomic
+  const [playtomicResults, setPlaytomicResults] = useState(null);
+  const [playtomicLoading, setPlaytomicLoading] = useState(false);
+
   const dragging = useRef(false);
   const dragVal = useRef(true);
   const createSubmitting = useRef(false);
@@ -835,7 +864,40 @@ export default function App() {
         durationMinutes: duration,
       });
       await reloadCurrentEvent();
-      setScreen("results");
+
+      // Consultar Playtomic após confirmação
+      setPlaytomicLoading(true);
+      try {
+        const startMinutes = parseTime(confirmStart);
+        const rawEnd = parseTime(confirmEnd);
+        const endMinutes = rawEnd <= startMinutes ? rawEnd + 1440 : rawEnd;
+
+        const clubsData = await Promise.all(
+          PLAYTOMIC_CLUBS.map(async (club) => {
+            try {
+              const data = await fetchClubAvailability(club, confirmDate);
+              const filtered = (data || []).map((resource) => ({
+                resourceId: resource.resource_id,
+                slots: (resource.slots || []).filter((s) => {
+                  const [h, m] = s.start_time.split(":").map(Number);
+                  const slotMinutes = h * 60 + m;
+                  return slotMinutes >= startMinutes && slotMinutes < endMinutes;
+                }),
+              })).filter((r) => r.slots.length > 0);
+              return { club, resources: filtered, error: null };
+            } catch {
+              return { club, resources: [], error: true };
+            }
+          })
+        );
+
+        setPlaytomicResults({ date: confirmDate, start: confirmStart, end: confirmEnd, clubs: clubsData });
+        setScreen("playtomic");
+      } catch {
+        setScreen("results");
+      } finally {
+        setPlaytomicLoading(false);
+      }
     } catch {
       setError("Erro ao confirmar evento. Tenta novamente.");
     } finally {
@@ -1538,6 +1600,85 @@ export default function App() {
             <button onClick={copyLink} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copied ? "Link Copiado" : "Copiar Link"}</button>
             <button onClick={copyEventCode} style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}` }}>{copiedCode ? "Código Copiado" : "Copiar Código"}</button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────── PLAYTOMIC
+  if (screen === "playtomic" && playtomicResults) {
+    const hasAny = playtomicResults.clubs.some((c) => c.resources.length > 0);
+
+    return withTheme(
+      <div style={{ ...BASE, padding: isPhone ? "72px 12px 28px" : "80px 16px 20px" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <Header
+            title="Campos Disponíveis"
+            subtitle={`${formatDateLong(playtomicResults.date)} · ${playtomicResults.start}–${playtomicResults.end}`}
+            onBack={() => setScreen("results")}
+          />
+
+          <div style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT}`, borderRadius: 18, padding: 14, marginBottom: 20 }}>
+            <p style={{ margin: 0, fontSize: 13, color: ACCENT_DARK, fontWeight: 700 }}>
+              ✅ Evento confirmado. Campos disponíveis na Playtomic para este horário.
+            </p>
+          </div>
+
+          {playtomicLoading && (
+            <p style={{ color: MUTED2, fontSize: 14 }}>A consultar a Playtomic...</p>
+          )}
+
+          {!playtomicLoading && !hasAny && (
+            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 16, color: MUTED2, fontSize: 14, marginBottom: 14 }}>
+              Nenhum campo disponível neste horário nos clubes guardados. Podes procurar diretamente na Playtomic.
+            </div>
+          )}
+
+          {playtomicResults.clubs.map(({ club, resources, error: clubError }) => (
+            <div key={club.tenantId} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 16, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: resources.length > 0 ? 12 : 0 }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 900, fontSize: 15 }}>{club.name}</p>
+                  {clubError && (
+                    <p style={{ margin: "4px 0 0", fontSize: 12, color: DANGER }}>Erro ao consultar este clube.</p>
+                  )}
+                  {!clubError && resources.length === 0 && (
+                    <p style={{ margin: "4px 0 0", fontSize: 12, color: MUTED2 }}>Sem campos disponíveis neste horário.</p>
+                  )}
+                </div>
+                <a
+                  href={club.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...buttonBase, background: ACCENT, color: "#fff", fontSize: 13, padding: "10px 14px", textDecoration: "none", borderRadius: 14, flexShrink: 0 }}
+                >
+                  Reservar ↗
+                </a>
+              </div>
+
+              {resources.map((resource, ri) => (
+                <div key={resource.resourceId} style={{ marginTop: ri > 0 ? 12 : 0 }}>
+                  <p style={{ margin: "0 0 6px", fontSize: 11, color: MUTED2, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Campo {ri + 1}
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {resource.slots.map((s, si) => (
+                      <span key={si} style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT}`, color: ACCENT_DARK, borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700 }}>
+                        {s.start_time.slice(0, 5)} · {s.duration} min · {s.price}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          <button
+            onClick={() => setScreen("results")}
+            style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}`, width: "100%", marginTop: 8 }}
+          >
+            Ver Resultados do Evento
+          </button>
         </div>
       </div>
     );
