@@ -124,13 +124,13 @@ const PLAYTOMIC_CLUBS = [
     name: "ESPAV (Alvalade)",
     tenantId: "af3e0532-cf37-43df-9278-c1de1f1a786c",
     sportId: "FOOTBALL_OTHERS",
-    url: "https://playtomic.com/club/af3e0532-cf37-43df-9278-c1de1f1a786c",
+    slug: "arena-playsports-alvalade-novo-relvado",
   },
   {
     name: "Parque das Nações",
     tenantId: "4c1a676f-fd98-4a84-98f7-93403cb359ff",
     sportId: "FOOTBALL7",
-    url: "https://playtomic.com/club/4c1a676f-fd98-4a84-98f7-93403cb359ff",
+    slug: "arena-playsports-parque-das-nacoes",
   },
 ];
 
@@ -1704,7 +1704,7 @@ export default function App() {
                   )}
                 </div>
                 <a
-                  href={club.url}
+                  href={`https://playtomic.com/clubs/${club.slug}?date=${playtomicResults.date}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ ...buttonBase, background: ACCENT, color: "#fff", fontSize: 13, padding: "10px 14px", textDecoration: "none", borderRadius: 14, flexShrink: 0 }}
