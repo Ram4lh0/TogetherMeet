@@ -905,6 +905,47 @@ export default function App() {
     }
   };
 
+  const openPlaytomic = async () => {
+    if (!currentEvent || playtomicLoading) return;
+    const date = currentEvent.confirmedDate;
+    const start = currentEvent.confirmedStart;
+    const end = currentEvent.confirmedEnd;
+    if (!date || !start || !end) return;
+
+    setPlaytomicLoading(true);
+    try {
+      const startMinutes = parseTime(start);
+      const rawEnd = parseTime(end);
+      const endMinutes = rawEnd <= startMinutes ? rawEnd + 1440 : rawEnd;
+
+      const clubsData = await Promise.all(
+        PLAYTOMIC_CLUBS.map(async (club) => {
+          try {
+            const data = await fetchClubAvailability(club, date);
+            const filtered = (data || []).map((resource) => ({
+              resourceId: resource.resource_id,
+              slots: (resource.slots || []).filter((s) => {
+                const [h, m] = s.start_time.split(":").map(Number);
+                const slotMinutes = h * 60 + m;
+                return slotMinutes >= startMinutes && slotMinutes < endMinutes;
+              }),
+            })).filter((r) => r.slots.length > 0);
+            return { club, resources: filtered, error: null };
+          } catch {
+            return { club, resources: [], error: true };
+          }
+        })
+      );
+
+      setPlaytomicResults({ date, start, end, clubs: clubsData });
+      setScreen("playtomic");
+    } catch {
+      setError("Erro ao consultar a Playtomic.");
+    } finally {
+      setPlaytomicLoading(false);
+    }
+  };
+
   const getCount = (dateKey, slotId) => {
     if (!currentEvent) return 0;
     return (currentEvent.responses || []).filter(
@@ -1341,10 +1382,17 @@ export default function App() {
           {isConfirmed && (
             <div style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT}`, borderRadius: 20, padding: 16, marginBottom: 16 }}>
               <p style={{ margin: "0 0 4px", color: ACCENT_DARK, fontWeight: 800, fontSize: 13 }}>✅ Evento Confirmado</p>
-              <p style={{ margin: 0, fontSize: 14, color: TEXT }}>
+              <p style={{ margin: "0 0 12px", fontSize: 14, color: TEXT }}>
                 {formatDateLong(currentEvent.confirmedDate)} · {currentEvent.confirmedStart}–{currentEvent.confirmedEnd}
                 {currentEvent.confirmedDurationMinutes ? ` · ${currentEvent.confirmedDurationMinutes} min` : ""}
               </p>
+              <button
+                onClick={openPlaytomic}
+                disabled={playtomicLoading}
+                style={{ ...buttonBase, background: playtomicLoading ? DISABLED_BG : ACCENT, color: playtomicLoading ? MUTED2 : "#fff", fontSize: 13, padding: "10px 16px", width: "100%" }}
+              >
+                {playtomicLoading ? "A consultar campos..." : "🏟 Ver Campos Disponíveis"}
+              </button>
             </div>
           )}
 
@@ -1561,10 +1609,19 @@ export default function App() {
           {isConfirmed && (
             <div style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT}`, borderRadius: 20, padding: 16, marginBottom: 20 }}>
               <p style={{ margin: "0 0 4px", color: ACCENT_DARK, fontWeight: 800, fontSize: 13 }}>✅ Evento Confirmado</p>
-              <p style={{ margin: 0, fontSize: 14, color: TEXT }}>
+              <p style={{ margin: "0 0 12px", fontSize: 14, color: TEXT }}>
                 {formatDateLong(currentEvent.confirmedDate)} · {currentEvent.confirmedStart}–{currentEvent.confirmedEnd}
                 {currentEvent.confirmedDurationMinutes ? ` · ${currentEvent.confirmedDurationMinutes} min` : ""}
               </p>
+              {isOwner && (
+                <button
+                  onClick={openPlaytomic}
+                  disabled={playtomicLoading}
+                  style={{ ...buttonBase, background: playtomicLoading ? DISABLED_BG : ACCENT, color: playtomicLoading ? MUTED2 : "#fff", fontSize: 13, padding: "10px 16px", width: "100%" }}
+                >
+                  {playtomicLoading ? "A consultar campos..." : "🏟 Ver Campos Disponíveis"}
+                </button>
+              )}
             </div>
           )}
 
@@ -1615,7 +1672,7 @@ export default function App() {
           <Header
             title="Campos Disponíveis"
             subtitle={`${formatDateLong(playtomicResults.date)} · ${playtomicResults.start}–${playtomicResults.end}`}
-            onBack={() => setScreen("results")}
+            onBack={() => setScreen("event")}
           />
 
           <div style={{ background: ACCENT_SOFT, border: `1px solid ${ACCENT}`, borderRadius: 18, padding: 14, marginBottom: 20 }}>
@@ -1673,12 +1730,20 @@ export default function App() {
             </div>
           ))}
 
-          <button
-            onClick={() => setScreen("results")}
-            style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}`, width: "100%", marginTop: 8 }}
-          >
-            Ver Resultados do Evento
-          </button>
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <button
+              onClick={() => setScreen("event")}
+              style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}`, flex: 1 }}
+            >
+              ← Voltar ao Evento
+            </button>
+            <button
+              onClick={() => setScreen("results")}
+              style={{ ...buttonBase, background: SURFACE, color: TEXT, border: `1px solid ${BORDER}`, flex: 1 }}
+            >
+              Ver Resultados
+            </button>
+          </div>
         </div>
       </div>
     );
