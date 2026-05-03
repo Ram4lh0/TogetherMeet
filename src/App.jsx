@@ -988,16 +988,99 @@ export default function App() {
 
   const bestOptions = useMemo(() => {
     if (!currentEvent) return [];
-    const rows = [];
+
+    const blocks = [];
+
     for (const d of eventDates) {
-      for (const s of slots) {
-        const count = getCount(d, s.id);
-        if (count > 0) rows.push({ dateKey: d, slot: s, count, names: getNames(d, s.id) });
+      // Build list of slots with at least 1 person available, sorted by time
+      const available = slots
+        .map((s) => ({ id: Number(s.id), count: getCount(d, s.id), names: getNames(d, s.id) }))
+        .filter((s) => s.count > 0)
+        .sort((a, b) => a.id - b.id);
+
+      if (available.length === 0) continue;
+
+      // Group into consecutive runs (each slot is 30min apart)
+      const runs = [];
+      let current = [available[0]];
+      for (let i = 1; i < available.length; i++) {
+        if (available[i].id === available[i - 1].id + 30) {
+          current.push(available[i]);
+        } else {
+          runs.push(current);
+          current = [available[i]];
+        }
+      }
+      runs.push(current);
+
+      // From each run, extract best 90min (3 slots) or 60min (2 slots) windows
+      for (const run of runs) {
+        if (run.length >= 3) {
+          // Try all 3-slot windows first
+          for (let i = 0; i <= run.length - 3; i++) {
+            const window = run.slice(i, i + 3);
+            const minCount = Math.min(...window.map((s) => s.count));
+            // intersection of names across all 3 slots
+            const nameSet = window.reduce((set, s) => {
+              if (set === null) return new Set(s.names);
+              return new Set(s.names.filter((n) => set.has(n)));
+            }, null);
+            blocks.push({
+              dateKey: d,
+              slotId: String(window[0].id),
+              durationSlots: 3,
+              count: minCount,
+              names: Array.from(nameSet),
+            });
+          }
+        }
+        if (run.length >= 2) {
+          // Try all 2-slot windows
+          for (let i = 0; i <= run.length - 2; i++) {
+            const window = run.slice(i, i + 2);
+            const minCount = Math.min(...window.map((s) => s.count));
+            const nameSet = window.reduce((set, s) => {
+              if (set === null) return new Set(s.names);
+              return new Set(s.names.filter((n) => set.has(n)));
+            }, null);
+            blocks.push({
+              dateKey: d,
+              slotId: String(window[0].id),
+              durationSlots: 2,
+              count: minCount,
+              names: Array.from(nameSet),
+            });
+          }
+        }
       }
     }
-    return rows
-      .sort((a, b) => b.count - a.count || a.dateKey.localeCompare(b.dateKey) || Number(a.slot.id) - Number(b.slot.id))
-      .slice(0, 4);
+
+    if (blocks.length === 0) return [];
+
+    // Prefer 90min blocks; among ties prefer more people; then earlier date/time
+    blocks.sort((a, b) =>
+      b.durationSlots - a.durationSlots ||
+      b.count - a.count ||
+      a.dateKey.localeCompare(b.dateKey) ||
+      Number(a.slotId) - Number(b.slotId)
+    );
+
+    // Deduplicate: remove blocks whose time window overlaps an already-chosen one on the same day
+    const chosen = [];
+    for (const block of blocks) {
+      const blockStart = Number(block.slotId);
+      const blockEnd = blockStart + block.durationSlots * 30;
+      const overlaps = chosen.some(
+        (c) =>
+          c.dateKey === block.dateKey &&
+          Number(c.slotId) < blockEnd &&
+          Number(c.slotId) + c.durationSlots * 30 > blockStart
+      );
+      if (!overlaps) chosen.push(block);
+      if (chosen.length >= 4) break;
+    }
+
+    return chosen;
   }, [currentEvent, eventDates, slots]);
 
   const selectedCount = Object.values(availability).filter(Boolean).length;
@@ -1465,16 +1548,16 @@ export default function App() {
                     <p style={{ ...sectionTitle, marginBottom: 8 }}>💡 Sugestões com mais disponibilidade</p>
                     <div style={{ display: "grid", gap: 6 }}>
                       {bestOptions.slice(0, 2).map((o) => {
-                        const interval = formatSlotInterval(o.dateKey, o.slot.id);
-                        const isSelected = selectedKey === `${o.dateKey}|${o.slot.id}`;
+                        const interval = formatSlotInterval(o.dateKey, o.slotId, o.durationSlots * 30);
+                        const isSelected = selectedKey === `${o.dateKey}|${o.slotId}`;
                         return (
                           <button
-                            key={`${o.dateKey}-${o.slot.id}`}
+                            key={`${o.dateKey}-${o.slotId}`}
                             type="button"
                             onClick={() => {
                               setConfirmDate(o.dateKey);
-                              setConfirmStart(o.slot.label);
-                              const endMin = Number(o.slot.id) + 30;
+                              setConfirmStart(timeLabel(Number(o.slotId)));
+                              const endMin = Number(o.slotId) + o.durationSlots * 30;
                               setConfirmEnd(timeLabel(endMin));
                             }}
                             style={{
@@ -1969,12 +2052,13 @@ function BestOptionsList({ bestOptions }) {
       <p style={sectionTitle}>Melhores opções</p>
       <div style={{ display: "grid", gap: 8 }}>
         {bestOptions.map((o, index) => {
-          const interval = formatSlotInterval(o.dateKey, o.slot.id);
+          const interval = formatSlotInterval(o.dateKey, o.slotId, o.durationSlots * 30);
+          const durationLabel = o.durationSlots === 3 ? "90 min" : "60 min";
           return (
-            <div key={`${o.dateKey}-${o.slot.id}`} style={{ background: SURFACE, border: `1px solid ${index === 0 ? ACCENT : BORDER}`, borderRadius: 18, padding: isPhone ? 12 : 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none" }}>
+            <div key={`${o.dateKey}-${o.slotId}`} style={{ background: SURFACE, border: `1px solid ${index === 0 ? ACCENT : BORDER}`, borderRadius: 18, padding: isPhone ? 12 : 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, boxShadow: index === 0 ? "0 14px 30px rgba(34,197,94,0.12)" : "none" }}>
               <div style={{ minWidth: 0 }}>
                 <strong style={{ display: "block", fontSize: isPhone ? 13 : 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {index + 1}. {interval.date} · {interval.range}
+                  {index + 1}. {interval.date} · {interval.range} <span style={{ color: MUTED2, fontWeight: 600 }}>({durationLabel})</span>
                 </strong>
                 <div style={{ color: MUTED2, fontSize: 12, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {o.names.join(", ")}
